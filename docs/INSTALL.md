@@ -4,6 +4,28 @@ Hay dos modos: **con Docker** (recomendado para no pelearse con Python) y **sin 
 
 ---
 
+## ⚠️ Pre-requisito: Ollama con un modelo de embeddings
+
+Antes de levantar nada, asegúrate de que tu Ollama responde con embeddings. **Ollama Cloud (`https://ollama.com`) no ofrece este endpoint** — solo modelos de chat. Necesitas Ollama local o remoto:
+
+```bash
+# Instala Ollama (si aún no): https://ollama.com/download
+ollama pull bge-m3              # multilingüe, recomendado
+# o:
+ollama pull mxbai-embed-large   # alta calidad, inglés
+ollama pull nomic-embed-text    # ligero, inglés
+
+# Verifica que responde:
+curl -X POST http://localhost:11434/api/embeddings \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"bge-m3","prompt":"hola"}' | head -c 200
+# Debe imprimir un JSON con un array {"embedding":[...]}
+```
+
+Si esto no funciona, no sigas — el resto fallará con `401`/`404`.
+
+---
+
 ## Modo A — Docker
 
 ### Requisitos
@@ -30,10 +52,10 @@ docker compose logs -f mcp-memory
 
 | Variable             | Default               | Descripción |
 |----------------------|-----------------------|-------------|
-| `OLLAMA_URL`         | `https://ollama.com`  | Endpoint Ollama. Cloud, local o remoto. |
+| `OLLAMA_URL`         | `http://host.docker.internal:11434` | Endpoint Ollama. **Cloud NO sirve para embeddings** — usa local o remoto. |
 | `OLLAMA_API_KEY`     | _vacío_               | Solo si tu endpoint requiere `Authorization: Bearer …`. |
-| `EMBEDDING_MODEL`    | `bge-m3`              | Modelo Ollama. Debe estar disponible en `OLLAMA_URL`. |
-| `EMBEDDING_DIM`      | `1024`                | Dimensión del modelo (bge-m3=1024, nomic-embed-text=768). |
+| `EMBEDDING_MODEL`    | `bge-m3`              | Modelo Ollama. Debe estar `ollama pull`-ed en tu Ollama. |
+| `EMBEDDING_DIM`      | `1024`                | **Debe coincidir EXACTO** con el modelo: bge-m3=1024, mxbai-embed-large=1024, nomic-embed-text=768. |
 | `MCP_PORT`           | `8765`                | Puerto del MCP en el host. |
 | `QDRANT_COLLECTION`  | `openclaw_memory`     | Nombre interno de la colección Qdrant. |
 | `DEFAULT_NAMESPACE`  | `default`             | Namespace cuando el cliente no especifica uno. |

@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     embedding_model: str = "bge-m3"
     embedding_dim: int = 1024
 
-    ollama_url: str = "https://ollama.com"
+    ollama_url: str = "http://host.docker.internal:11434"
     ollama_api_key: str | None = None
 
     qdrant_url: str = "http://qdrant:6333"
