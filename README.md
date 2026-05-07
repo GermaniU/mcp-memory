@@ -1,144 +1,81 @@
-# OpenClaw System Memory
+# OpenClaw System Memory — Memoria local para agentes IA vía MCP
 
-> **Memoria persistente con búsqueda semántica para tus agentes IA, vía MCP. Levantas Qdrant, conectas tu Ollama, pegas la URL en tu cliente y listo.**
+> **Lleva la memoria de tu agente IA a cualquier máquina.**
+> Servidor MCP open source que da memoria persistente con búsqueda semántica a Claude Code, OpenCode, Cursor, Continue y cualquier cliente compatible con [Model Context Protocol](https://modelcontextprotocol.io). Embeddings con Ollama, vector search con Qdrant, **100% en tu hardware**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-green)](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](server/pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-16_passing-brightgreen)](server/tests/unit)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-Servidor [MCP](https://modelcontextprotocol.io) que da a cualquier cliente compatible (Claude Code, OpenCode, Cursor, Continue…) **memoria con búsqueda semántica** corriendo en tu máquina:
-
-- 🦙 Embeddings vía cualquier endpoint compatible Ollama.
-- 🔍 Vector search con [Qdrant](https://qdrant.tech) (cosine + payload indexes).
-- 🧩 Namespaces para separar memoria por proyecto/agente.
-- 🛠 7 tools MCP: `memory_save`, `memory_search`, `memory_delete`, `memory_list`, `memory_update`, `memory_recent`, `memory_stats`.
-- 🐳 Docker-friendly pero **no obligatorio**.
+**Tags:** `mcp-server` · `ai-agents` · `ollama` · `qdrant` · `claude-code` · `cursor` · `opencode` · `semantic-search` · `embeddings` · `agent-memory` · `vector-database` · `rag` · `local-first` · `self-hosted`
 
 ---
 
-## ⚠️ Antes de empezar — sobre Ollama y embeddings
+## 💡 Por qué existe
+
+Los agentes IA olvidan todo entre conversaciones. Las soluciones existentes son cloud-only, multi-tenant pesado, o están atadas a un único cliente. **OpenClaw System Memory** resuelve esto con tres ideas simples:
+
+1. **Tu memoria, tu máquina.** Embeddings + vectores corren localmente. Cero datos en la nube.
+2. **Conectas una vez, funciona en todos lados.** Es un servidor MCP estándar — cualquier cliente que hable MCP lo usa sin custom code.
+3. **Cero overhead.** `docker compose up` y tienes 7 tools listas para tu agente.
+
+---
+
+## ⚡ Quickstart (3 comandos)
+
+> **Pre-requisito:** un Ollama con un modelo de embeddings descargado. Lee la advertencia abajo antes de continuar.
+
+```bash
+git clone https://github.com/GermaniU/GermaniU-OpenClawSystemMemory.git
+cd GermaniU-OpenClawSystemMemory
+cp .env.example .env && docker compose up -d
+```
+
+Endpoint MCP: `http://localhost:8765/mcp`. Pégalo en la config de tu cliente (ver [`docs/CLIENTS.md`](docs/CLIENTS.md) — Claude Code, OpenCode, Cursor, Continue).
+
+---
+
+## ⚠️ Antes de empezar — Ollama y embeddings
 
 Esto te ahorra una tarde de debugging:
 
-> **Ollama Cloud (`https://ollama.com`) hoy NO ofrece modelos de embedding.** Su catálogo cloud es solo de LLMs de chat (kimi-k2, deepseek, gpt-oss, qwen-coder, glm, etc.). Una llamada a `POST https://ollama.com/api/embed` devuelve **401** aunque tu API key sea válida para `/api/chat`.
+> **Ollama Cloud (`https://ollama.com`) hoy NO ofrece modelos de embedding.** Su catálogo cloud es solo de LLMs de chat (kimi-k2, deepseek, gpt-oss, qwen-coder, glm…). `POST https://ollama.com/api/embed` devuelve **401** aunque tu API key sea válida para `/api/chat`.
 
-**Necesitas embeddings → necesitas un Ollama con el modelo en el dispositivo.** Opciones:
-
-| Setup | `OLLAMA_URL` | Cuándo |
-|---|---|---|
-| **Ollama local en tu Mac/Linux** ✅ recomendado | `http://host.docker.internal:11434` | Tienes Ollama instalado y descargaste un modelo de embeddings |
-| **Ollama remoto** (tu servidor, VPS) | `https://ollama.tu-dominio.com` | Tienes Ollama corriendo en otro host |
-| **Ollama Cloud** ❌ no funciona para embeddings | `https://ollama.com` | Solo chat, sin embeddings |
-
-### Modelos de embedding recomendados
+**Necesitas embeddings → necesitas Ollama en el dispositivo (local o tu servidor).**
 
 ```bash
-ollama pull bge-m3              # 1.2GB, 1024 dim, multilingüe (recomendado para español)
-ollama pull mxbai-embed-large   # 670MB, 1024 dim, alta calidad en inglés
-ollama pull nomic-embed-text    # 274MB, 768 dim, ligero, inglés
+# Instala Ollama: https://ollama.com/download
+ollama pull bge-m3              # 1.2GB · 1024 dim · multilingüe (recomendado para español)
+# alternativas:
+ollama pull mxbai-embed-large   # 670MB · 1024 dim · alta calidad en inglés
+ollama pull nomic-embed-text    # 274MB ·  768 dim · ligero, inglés
 ```
 
-Verifica que tu Ollama responde antes de levantar el stack:
+Verifica antes de seguir:
 
 ```bash
 curl -X POST http://localhost:11434/api/embeddings \
   -H 'Content-Type: application/json' \
   -d '{"model":"bge-m3","prompt":"hola"}' | head -c 200
-# → {"embedding":[-0.13...,0.72...]}  ← debe devolver un array de floats
+# → {"embedding":[-0.13...,0.72...]}  ← debe imprimir un array de floats
 ```
+
+| Setup                                    | `OLLAMA_URL`                              | Funciona |
+|------------------------------------------|-------------------------------------------|----------|
+| **Ollama local** ✅ recomendado          | `http://host.docker.internal:11434`       | sí       |
+| **Ollama remoto** (tu servidor / VPS)    | `https://ollama.tu-dominio.com`           | sí       |
+| **Ollama Cloud** ❌ no da embeddings     | `https://ollama.com`                      | no       |
 
 ---
 
-## ⚡ Quickstart con Docker
-
-```bash
-git clone https://github.com/GermaniU/GermaniU-OpenClawSystemMemory.git
-cd GermaniU-OpenClawSystemMemory
-cp .env.example .env
-
-# Edita .env — el default ya apunta a Ollama local. Si está en otra parte, ajústalo.
-# OLLAMA_URL=http://host.docker.internal:11434
-# EMBEDDING_MODEL=bge-m3
-# EMBEDDING_DIM=1024
-
-docker compose up -d
-```
-
-Solo levanta dos contenedores: **Qdrant** (vector DB) y **mcp-memory** (servidor MCP). Ollama lo aportas tú.
-
-Endpoint MCP: `http://localhost:8765/mcp`. Pégalo en la config de tu cliente — ver [`docs/CLIENTS.md`](docs/CLIENTS.md).
-
----
-
-## ⚡ Quickstart sin Docker (Python local)
-
-Si ya tienes Qdrant en otro lado y prefieres correr el MCP server como proceso Python:
-
-```bash
-git clone https://github.com/GermaniU/GermaniU-OpenClawSystemMemory.git
-cd GermaniU-OpenClawSystemMemory/server
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-
-export OLLAMA_URL=http://localhost:11434
-export QDRANT_URL=http://localhost:6333
-export EMBEDDING_MODEL=bge-m3
-export EMBEDDING_DIM=1024
-
-python -m openclaw_memory
-# Listening on http://0.0.0.0:8765/mcp
-```
-
----
-
-## 🧪 Smoke test — verificar que todo funciona (curl)
-
-El protocolo MCP exige el header `Accept: application/json, text/event-stream` y un `mcp-session-id` después del `initialize`. Aquí el test mínimo (copia-pega):
-
-```bash
-# 1. Initialize y captura session id
-SESSION=$(curl -sS -D - -o /dev/null -X POST http://localhost:8765/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2025-06-18' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0.1"}}}' \
-  | tr -d '\r' | awk '/^mcp-session-id:/{print $2}')
-echo "session=$SESSION"
-
-# 2. Notificación initialized (obligatoria por protocolo)
-curl -sS -X POST http://localhost:8765/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2025-06-18' \
-  -H "mcp-session-id: $SESSION" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-
-# 3. memory_save
-curl -sS -X POST http://localhost:8765/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2025-06-18' \
-  -H "mcp-session-id: $SESSION" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_save","arguments":{"inp":{"content":"funciona end-to-end","namespace":"smoke","tags":["ok"]}}}}'
-
-# 4. memory_search
-curl -sS -X POST http://localhost:8765/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2025-06-18' \
-  -H "mcp-session-id: $SESSION" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"memory_search","arguments":{"inp":{"query":"funciona?","namespace":"smoke"}}}}'
-```
-
-Debes ver SSE con un JSON que incluye un `id` UUID en `memory_save` y un array con `score > 0` en `memory_search`.
-
----
-
-## 🛠 Tools expuestos
+## 🛠 Tools MCP expuestas
 
 | Tool             | Para qué |
 |------------------|----------|
-| `memory_save`    | Guardar texto + tags + metadata; embebe automáticamente. |
+| `memory_save`    | Guardar texto + tags + metadata. Embebe automáticamente. |
 | `memory_search`  | Búsqueda semántica con filtro por namespace y `min_score`. |
 | `memory_update`  | Cambiar contenido/tags/metadata por id. Re-embebe si cambia el contenido. |
 | `memory_delete`  | Borrar por id. |
@@ -146,9 +83,76 @@ Debes ver SSE con un JSON que incluye un `id` UUID en `memory_save` y un array c
 | `memory_recent`  | Las últimas N por `updated_at`. |
 | `memory_stats`   | Conteo, namespaces, oldest/newest. |
 
+Schemas + ejemplos de invocación en [`docs/CLIENTS.md`](docs/CLIENTS.md).
+
 ---
 
-## 🧱 Arquitectura
+## 🎯 Alcance actual
+
+OpenClaw System Memory es deliberadamente pequeño. Hace **una cosa bien: memoria semántica de texto plano**. No es un sistema de RAG completo, no es un knowledge base, no es un grafo.
+
+### Lo que SÍ hace
+- ✅ Almacena y recupera **texto puro** con embeddings.
+- ✅ Búsqueda semántica con filtro por `namespace` y `min_score`.
+- ✅ Tags + metadata libres en cada entrada.
+- ✅ 7 tools MCP estándar para cualquier agente compatible.
+- ✅ Persistencia en disco (volumen Qdrant), backup = `tar`.
+
+### Lo que NO hace (todavía)
+- ❌ **No soporta imágenes ni gráficas.** Solo texto.
+- ❌ **No soporta PDFs ni archivos binarios** — extrae el texto antes de guardarlo.
+- ❌ **No es multi-tenant.** Una persona, una máquina, una memoria (con namespaces para separar contextos).
+- ❌ **No tiene UI propia.** Lo administras desde el agente o por curl/MCP.
+- ❌ **No sincroniza entre máquinas.** Backup manual (`tar` del volumen) si quieres mover datos.
+- ❌ **No tiene auth.** Solo escucha en `localhost`. Si lo expones a internet, pon un proxy con auth.
+
+Si necesitas algo de la lista NO, abre un [issue](https://github.com/GermaniU/GermaniU-OpenClawSystemMemory/issues) con caso de uso real (no especulativo) — vamos por demanda, no por especulación.
+
+---
+
+## 🔌 Conectar tu cliente
+
+Configuración lista para copiar en [`docs/CLIENTS.md`](docs/CLIENTS.md):
+
+- 🟦 **Claude Code** — añade a `~/.claude/.mcp.json` y habilita en `settings.json`.
+- 🟧 **Cursor** — Settings → MCP Servers → Add new MCP Server.
+- 🟩 **Continue** (VS Code / JetBrains) — `~/.continue/config.json`.
+- 🟪 **OpenCode** — `~/.config/opencode/config.json`.
+
+Snippets JSON listos en [`examples/`](examples/).
+
+---
+
+## 🧪 Smoke test con curl
+
+Para validar el stack sin necesidad de un cliente MCP:
+
+```bash
+SESSION=$(curl -sS -D - -o /dev/null -X POST http://localhost:8765/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-06-18' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0.1"}}}' \
+  | tr -d '\r' | awk '/^mcp-session-id:/{print $2}')
+
+curl -sS -X POST http://localhost:8765/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-06-18' \
+  -H "mcp-session-id: $SESSION" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+curl -sS -X POST http://localhost:8765/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-06-18' \
+  -H "mcp-session-id: $SESSION" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_save","arguments":{"inp":{"content":"funciona end-to-end","namespace":"smoke","tags":["ok"]}}}}'
+```
+
+---
+
+## 🧱 Arquitectura (vertical slice)
 
 ```
 ┌─ tu agente (Claude Code / OpenCode / Cursor / …) ─┐
@@ -168,35 +172,56 @@ Debes ver SSE con un JSON que incluye un `id` UUID en `memory_save` y un array c
    └──────────────────┘
 ```
 
-Vertical-slice: cada tool MCP vive en su propia carpeta con handler aislado, fácil de entender y testear sin levantar nada (`pytest tests/unit`, 16 tests, <0.3s).
+Cada tool MCP vive en su propia carpeta (`server/src/openclaw_memory/tools/<tool>/handler.py`). Añadir una tool nueva = añadir una carpeta + un decorator en `server.py`. Cero acoplamiento.
 
-Detalle: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Detalle técnico en [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
-## 🩹 Troubleshooting (los errores que ya pisé yo)
+## 🤝 Contribuye
+
+OpenClaw System Memory es **un regalo a la comunidad** — MIT, sin trampas. PRs, issues y forks bienvenidos.
+
+**Reglas (resumen):**
+1. **Clean Code · SOLID · KISS · YAGNI · Vertical slice · Tests primero.** No se aceptan PRs sin tests para la lógica nueva.
+2. **Identifiers en inglés**, comentarios y commits en español. Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`).
+3. **Una tool nueva = una carpeta nueva.** No tocar slices existentes salvo bug.
+4. **DIP**: dependencias externas detrás de un `Protocol` para que el test no necesite Docker.
+5. **Sin abstracciones especulativas.** Si solo hay 1 implementación, no hay interfaz.
+6. **Documenta el WHY, no el WHAT.** El nombre de la función ya cuenta el qué.
+
+Detalle completo + workflow paso a paso en [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+```bash
+# Setup local de desarrollo (sin Docker)
+cd server
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q                     # 16 unit tests, <0.3s, sin Docker ni Ollama
+ruff check src tests
+```
+
+---
+
+## 🩹 Troubleshooting (errores reales que ya pisé)
 
 **`401 unauthorized` desde el MCP server al hacer `memory_save`**
-- Tu `OLLAMA_URL` apunta a `https://ollama.com` y tu cuenta no tiene embeddings (es lo normal hoy). Cambia `OLLAMA_URL` a tu Ollama local o remoto.
+- Apuntas a Ollama Cloud y tu cuenta no tiene embeddings (es lo normal hoy). Cambia `OLLAMA_URL` a Ollama local/remoto.
 
 **`404 Not Found` para `https://ollama.com/api/embeddings`**
-- Mismo problema: Ollama Cloud no expone ese endpoint. La versión moderna usa `/api/embed` y aún así da 401 sin acceso a embeddings.
+- Mismo problema: Ollama Cloud no expone ese endpoint.
 
 **`Connection reset by peer` al hacer `curl http://localhost:8765/mcp`**
-- Falta el header `Accept: application/json, text/event-stream`. Sin él, FastMCP cierra la conexión. Mira el smoke test arriba.
-
-**Mi Ollama corre en mi Mac, no me conecta desde el contenedor**
-- Usa `OLLAMA_URL=http://host.docker.internal:11434` (Docker Desktop lo resuelve automáticamente). En Linux nativo el compose ya añade `extra_hosts: host-gateway`.
+- Falta el header `Accept: application/json, text/event-stream`. Sin él, FastMCP cierra la conexión.
 
 **`memory_search` devuelve vacío**
-- Verifica el namespace: si guardaste sin namespace, busca con el namespace `default`.
-- Baja `min_score` a `0.0` para diagnosticar; en uso real súbelo a 0.5–0.7.
+- ¿Mismo namespace? Si guardaste sin namespace, busca con `default`. Baja `min_score` a `0.0` para diagnosticar.
 
-**El contenedor `mcp-memory` reinicia en bucle**
-- `docker compose logs mcp-memory`. Causas frecuentes: modelo `EMBEDDING_MODEL` no descargado en tu Ollama, `EMBEDDING_DIM` no coincide con el modelo (ej: pones `768` con `bge-m3` que es `1024`), o Qdrant aún arrancando.
+**`mcp-memory` reinicia en bucle**
+- `docker compose logs mcp-memory`. Causas: modelo no descargado en tu Ollama, `EMBEDDING_DIM` no coincide con el modelo (bge-m3=1024, no 768), o Qdrant aún arrancando.
 
 **Cambiar de modelo de embedding después de tener datos**
-- Los vectores viejos no son compatibles con otra dimensión. Borra la colección y reingiere:
+- Los vectores viejos no son compatibles con otra dimensión:
   ```bash
   curl -X DELETE http://localhost:6333/collections/openclaw_memory
   docker compose up -d --force-recreate mcp-memory
@@ -204,29 +229,20 @@ Detalle: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
-## 📚 Docs
+## 📚 Documentación
 
 - [`docs/INSTALL.md`](docs/INSTALL.md) — instalación detallada, variables, troubleshooting extendido.
 - [`docs/CLIENTS.md`](docs/CLIENTS.md) — config para Claude Code, OpenCode, Cursor, Continue.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — decisiones técnicas y por qué.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — disciplinas, workflow, cómo añadir una tool.
 - [`legacy/`](legacy/) — primera implementación en Node (deprecada, se conserva como referencia).
-
----
-
-## 🤝 Cómo contribuir
-
-```bash
-cd server
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-pytest -q                     # 16 tests unitarios sin Docker ni Ollama
-ruff check src tests
-```
-
-Disciplinas del repo: **Clean Code · SOLID · KISS · YAGNI · vertical slice · tests primero**. Una tool nueva = una carpeta nueva en `server/src/openclaw_memory/tools/`.
 
 ---
 
 ## 📄 Licencia
 
 [MIT](LICENSE) — úsalo, fórkalo, regálale a otra gente más memoria local.
+
+---
+
+**Hecho por [@GermaniU](https://github.com/GermaniU)** con disciplinas de software profesional. Si te ha servido, una ⭐ ayuda a que más gente lo encuentre. Si te ha roto algo, abre un issue y lo arreglamos.
