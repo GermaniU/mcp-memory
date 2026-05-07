@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/og-image.png" alt="OpenClaw System Memory — memoria local para agentes IA vía MCP" width="720">
+</p>
+
 # OpenClaw System Memory — Memoria local para agentes IA vía MCP
 
 > **Lleva la memoria de tu agente IA a cualquier máquina.**
