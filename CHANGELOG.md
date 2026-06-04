@@ -8,14 +8,18 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Added
+- **Tools `memory_export` / `memory_import` (JSONL).** Export sin vectores (portable entre modelos de embedding); import que re-embeda preservando id/timestamps/namespace/tags/metadata, colisión de id = skip, errores por línea sin abortar. Método `get(memory_id)` añadido al Protocol `MemoryStore`.
+- **CI con GitHub Actions** (ruff + unit tests en Python 3.11/3.12/3.13 en cada PR), dependabot (pip + actions) y templates de issues/PRs.
+- **README canónico en inglés** + `README.es.md` con language switcher; badge de CI real en vez del estático.
+
 ### Fixed
 - `memory_stats` ya no lista "namespaces fantasma": el facet de Qdrant devuelve hits con `count: 0` para namespaces cuyos points fueron borrados, y `stats()` no los filtraba. Detectado validando el MCP E2E desde Claude Code.
 
 ### Posibles próximos pasos
-- Soporte para `EmbeddingsClient` adicionales (OpenAI, Voyage, Cohere) en paralelo a Ollama.
-- Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra".
-- Tool `memory_export` (JSONL/Markdown) para portabilidad.
-- Imagen oficial publicada en Docker Hub / GHCR.
+- Soporte para `EmbeddingsClient` adicionales (fastembed/ONNX primero — ver ADR cero-infra; luego OpenAI, Voyage, Cohere).
+- Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra" — ADR aprobándose.
+- Imagen oficial publicada en GHCR — PR #15 en review.
 
 > Estos son posibles, no garantizados. PRs bienvenidos — lee [CONTRIBUTING.md](CONTRIBUTING.md).
 
