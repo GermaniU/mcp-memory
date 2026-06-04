@@ -6,22 +6,26 @@ El servidor expone **streamable HTTP** en `http://localhost:8765/mcp` (puerto co
 
 ## Claude Code
 
-Edita `~/.claude/settings.json` (user-level) o `.claude/settings.json` del proyecto y añade:
+Regístralo con el CLI (scope `user` = disponible en todos tus proyectos):
 
-```json
-{
-  "mcpServers": {
-    "mcp-memory": {
-      "type": "http",
-      "url": "http://localhost:8765/mcp"
-    }
-  }
-}
+```bash
+claude mcp add -s user -t http mcp-memory http://localhost:8765/mcp
 ```
 
-Reinicia Claude Code. Las tools aparecen como `mcp__mcp-memory__memory_save`, etc.
+> ⚠️ **No edites `~/.claude/settings.json`** — Claude Code lee los servers MCP de `~/.claude.json` (en la raíz de tu home), que es el archivo que `claude mcp add` gestiona. Añadir `mcpServers` a settings.json no tiene ningún efecto.
 
-Ver también: [`examples/claude-code.json`](../examples/claude-code.json).
+> ⚠️ **Las tools aparecen en sesiones NUEVAS**, no en la sesión donde registraste el server. `claude mcp list` puede decir `✓ Connected` y aun así tu sesión abierta no las tiene — reiníciala.
+
+Verifica:
+
+```bash
+claude mcp list
+# mcp-memory: http://localhost:8765/mcp (HTTP) - ✓ Connected
+```
+
+Las tools aparecen como `mcp__mcp-memory__memory_save`, etc.
+
+Ver también: [`examples/claude-code.json`](../examples/claude-code.json) — es la entrada que `claude mcp add` deja escrita en `~/.claude.json`, por si prefieres auditarla a mano.
 
 ---
 

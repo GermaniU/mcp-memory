@@ -31,10 +31,10 @@ Si esto no funciona, no sigas — el resto fallará con `401`/`404`.
 ### Requisitos
 
 - **Docker** ≥ 24 con Compose v2.
-- Un endpoint de Ollama disponible:
-  - Ollama Cloud → API key.
+- Un endpoint de Ollama **con modelo de embeddings** (ver pre-requisito arriba):
   - Ollama local en tu Mac → `host.docker.internal` (Docker Desktop lo resuelve).
-  - Ollama remoto → URL pública.
+  - Ollama remoto → URL pública (+ `OLLAMA_API_KEY` si tu proxy la exige).
+  - Ollama Cloud ❌ — no ofrece embeddings.
 - Puertos libres: `8765` (MCP), `6333` (Qdrant).
 
 ### Pasos
@@ -70,7 +70,7 @@ Tras editar `.env`: `docker compose up -d` (recrea solo lo necesario).
 
 - Python 3.11+.
 - Qdrant disponible — local (`docker run -p 6333:6333 qdrant/qdrant`), Qdrant Cloud, o uno tuyo.
-- Endpoint Ollama (cloud, local o remoto).
+- Endpoint Ollama local o remoto con modelo de embeddings (**Cloud no sirve** — ver pre-requisito arriba).
 
 ### Pasos
 
@@ -80,8 +80,8 @@ cd mcp-memory/server
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 
-export OLLAMA_URL=https://ollama.com
-export OLLAMA_API_KEY=...
+export OLLAMA_URL=http://localhost:11434   # o tu Ollama remoto (Cloud NO da embeddings)
+# export OLLAMA_API_KEY=...                # solo si tu endpoint remoto la exige
 export QDRANT_URL=http://localhost:6333
 export EMBEDDING_MODEL=bge-m3
 export EMBEDDING_DIM=1024

@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-green)](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](server/pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-16_passing-brightgreen)](server/tests/unit)
+[![Tests](https://img.shields.io/badge/tests-16_unit_%2B_6_integration-brightgreen)](server/tests)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -118,7 +118,7 @@ Si necesitas algo de la lista NO, abre un [issue](https://github.com/GermaniU/mc
 
 Configuración lista para copiar en [`docs/CLIENTS.md`](docs/CLIENTS.md):
 
-- 🟦 **Claude Code** — añade a `~/.claude/.mcp.json` y habilita en `settings.json`.
+- 🟦 **Claude Code** — `claude mcp add -s user -t http mcp-memory http://localhost:8765/mcp` (las tools aparecen en sesiones nuevas).
 - 🟧 **Cursor** — Settings → MCP Servers → Add new MCP Server.
 - 🟩 **Continue** (VS Code / JetBrains) — `~/.continue/config.json`.
 - 🟪 **OpenCode** — `~/.config/opencode/config.json`.

@@ -37,7 +37,7 @@ Cada slice es **una función pura** que recibe sus dependencias por keyword argu
 ### KISS + YAGNI
 
 - Una sola colección Qdrant; namespaces se filtran por payload con índice keyword. Sin colecciones por namespace ni por usuario. Suficiente hasta los millones de vectores.
-- `recent` y `stats` no usan agregaciones nativas de Qdrant — un `scroll` + sort en Python es legible y rápido para volúmenes humanos. Se puede optimizar el día que importe (no antes).
+- `recent` y `stats` resuelven server-side en Qdrant (desde 0.2.0): `recent` usa `scroll` con `OrderBy(updated_at, DESC)` y `limit` real; `stats` usa `count(exact=True)`, `facet(key="namespace")` y dos `scroll` de `limit=1` para oldest/newest. En 0.1.0 era scroll completo + sort en Python — se optimizó cuando dejó de alcanzar, no antes (YAGNI aplicado en ambas direcciones).
 - El servidor expone solo `streamable-http`. stdio se añade cuando un usuario real lo pida.
 - Modelo de embeddings inyectable vía `.env`, dimensión también. No hay "registry de modelos".
 
