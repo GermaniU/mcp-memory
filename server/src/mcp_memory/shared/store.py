@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 from typing import Any
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as qm
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from mcp_memory.shared.types import Memory
+
+# Payload indexes the store relies on: namespace filtering, recent/oldest ordering.
+_PAYLOAD_INDEXES: tuple[tuple[str, qm.PayloadSchemaType], ...] = (
+    ("namespace", qm.PayloadSchemaType.KEYWORD),
+    ("updated_at", qm.PayloadSchemaType.FLOAT),
+    ("created_at", qm.PayloadSchemaType.FLOAT),
+)
 
 
 class QdrantStore:
@@ -18,23 +27,53 @@ class QdrantStore:
         self._dim = dim
 
     async def ensure_collection(self) -> None:
+        """Create the collection if missing; otherwise validate its vector dim.
+
+        Idempotent: safe to call on every boot. If the collection exists with a
+        different vector size, raise — silently writing wrong-dim vectors would
+        corrupt search. Payload indexes are (re)asserted in both branches.
+        """
         existing = await self._client.get_collections()
         if any(c.name == self._collection for c in existing.collections):
-            return
-        await self._client.create_collection(
-            collection_name=self._collection,
-            vectors_config=qm.VectorParams(size=self._dim, distance=qm.Distance.COSINE),
-        )
-        await self._client.create_payload_index(
-            collection_name=self._collection,
-            field_name="namespace",
-            field_schema=qm.PayloadSchemaType.KEYWORD,
-        )
-        await self._client.create_payload_index(
-            collection_name=self._collection,
-            field_name="updated_at",
-            field_schema=qm.PayloadSchemaType.FLOAT,
-        )
+            await self._validate_dim()
+        else:
+            await self._client.create_collection(
+                collection_name=self._collection,
+                vectors_config=qm.VectorParams(size=self._dim, distance=qm.Distance.COSINE),
+            )
+        await self._ensure_indexes()
+
+    async def _validate_dim(self) -> None:
+        info = await self._client.get_collection(self._collection)
+        vectors = info.config.params.vectors
+        # Unnamed default vector → VectorParams; named vectors → dict[str, VectorParams].
+        if isinstance(vectors, qm.VectorParams):
+            actual = vectors.size
+        elif isinstance(vectors, dict) and "" in vectors:
+            actual = vectors[""].size
+        else:
+            # Named-vector collection not created by this store; cannot reconcile.
+            raise RuntimeError(
+                f"Collection '{self._collection}' uses named vectors and was not "
+                f"created by mcp-memory. Use a dedicated collection (QDRANT_COLLECTION)."
+            )
+        if actual != self._dim:
+            raise RuntimeError(
+                f"Collection '{self._collection}' has vector size {actual} but "
+                f"EMBEDDING_DIM is {self._dim}. They must match. "
+                f"Point QDRANT_COLLECTION at a fresh name, or recreate the collection "
+                f"with the correct dimension (this will drop existing data)."
+            )
+
+    async def _ensure_indexes(self) -> None:
+        for field_name, field_schema in _PAYLOAD_INDEXES:
+            # Creating an already-existing index is a no-op error — non-fatal on boot.
+            with contextlib.suppress(UnexpectedResponse):
+                await self._client.create_payload_index(
+                    collection_name=self._collection,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                )
 
     async def save(self, memory: Memory, vector: list[float]) -> Memory:
         await self._client.upsert(
@@ -129,29 +168,62 @@ class QdrantStore:
         points, _ = await self._client.scroll(
             collection_name=self._collection,
             scroll_filter=_namespace_filter(namespace),
-            limit=10_000,
+            order_by=qm.OrderBy(key="updated_at", direction=qm.Direction.DESC),
+            limit=limit,
             with_payload=True,
         )
-        memories = [_from_payload(p.payload, point_id=str(p.id)) for p in points]
-        memories.sort(key=lambda m: m.updated_at, reverse=True)
-        return memories[:limit]
+        return [_from_payload(p.payload, point_id=str(p.id)) for p in points]
 
     async def stats(self, *, namespace: str | None) -> dict[str, Any]:
-        points, _ = await self._client.scroll(
+        ns_filter = _namespace_filter(namespace)
+        count = (
+            await self._client.count(
+                collection_name=self._collection,
+                count_filter=ns_filter,
+                exact=True,
+            )
+        ).count
+        if count == 0:
+            return {"count": 0, "namespaces": [], "oldest": None, "newest": None}
+
+        facet = await self._client.facet(
             collection_name=self._collection,
-            scroll_filter=_namespace_filter(namespace),
-            limit=10_000,
+            key="namespace",
+            facet_filter=ns_filter,
+            exact=True,
+        )
+        namespaces = sorted(str(h.value) for h in facet.hits)
+
+        oldest_points, _ = await self._client.scroll(
+            collection_name=self._collection,
+            scroll_filter=ns_filter,
+            order_by=qm.OrderBy(key="created_at", direction=qm.Direction.ASC),
+            limit=1,
             with_payload=True,
         )
-        if not points:
-            return {"count": 0, "namespaces": [], "oldest": None, "newest": None}
-        memories = [_from_payload(p.payload, point_id=str(p.id)) for p in points]
+        newest_points, _ = await self._client.scroll(
+            collection_name=self._collection,
+            scroll_filter=ns_filter,
+            order_by=qm.OrderBy(key="updated_at", direction=qm.Direction.DESC),
+            limit=1,
+            with_payload=True,
+        )
+        oldest = _from_payload(oldest_points[0].payload, point_id=str(oldest_points[0].id))
+        newest = _from_payload(newest_points[0].payload, point_id=str(newest_points[0].id))
         return {
-            "count": len(memories),
-            "namespaces": sorted({m.namespace for m in memories}),
-            "oldest": min(m.created_at for m in memories).isoformat(),
-            "newest": max(m.updated_at for m in memories).isoformat(),
+            "count": count,
+            "namespaces": namespaces,
+            "oldest": oldest.created_at.isoformat(),
+            "newest": newest.updated_at.isoformat(),
         }
+
+    async def ping(self) -> bool:
+        """Lightweight liveness check for /health — does the collection answer?"""
+        try:
+            await self._client.get_collection(self._collection)
+            return True
+        except Exception:
+            return False
 
     async def _fetch(self, memory_id: str) -> Memory | None:
         points = await self._client.retrieve(

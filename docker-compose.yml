@@ -16,18 +16,22 @@ services:
   mcp-memory:
     build:
       context: ./server
-    image: mcp-memory:0.1.0
+    image: mcp-memory:0.2.0
     container_name: mcp-memory
     restart: unless-stopped
     depends_on:
       qdrant:
         condition: service_healthy
+        required: false
     environment:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       OLLAMA_URL: ${OLLAMA_URL:-https://ollama.com}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
-      QDRANT_URL: http://qdrant:6333
+      # Default: el Qdrant bundled de este compose. Para apuntar a un Qdrant
+      # externo, exporta QDRANT_URL (p.ej. http://host.docker.internal:6333) y
+      # corre solo este service: `docker compose up mcp-memory`.
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-mcp_memory}
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8765
@@ -36,6 +40,16 @@ services:
       - "${MCP_PORT:-8765}:8765"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8765/health',timeout=3).status==200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
 volumes:
   qdrant-data:

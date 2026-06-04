@@ -78,7 +78,7 @@ Mensaje en imperativo, primera línea ≤ 72 chars, cuerpo opcional explicando e
 - **1 PR = 1 propósito.** No mezclar feature + refactor + bumps de deps.
 - Título en formato Conventional Commit.
 - Cuerpo del PR responde: **qué cambia, por qué, cómo lo probaste**.
-- CI verde (tests + ruff). Local: `pytest -q && ruff check src tests`.
+- CI verde (tests + ruff). Local: `pytest tests/unit -q && ruff check src tests scripts`.
 
 ---
 
@@ -90,20 +90,23 @@ cd mcp-memory/server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Ejecutar tests (16, sin Docker ni Ollama, <1s)
-pytest -q
+# Ejecutar tests unitarios (16, sin Docker ni Ollama, <1s)
+pytest tests/unit -q
 
 # Lint + format
-ruff check src tests
-ruff format src tests
+ruff check src tests scripts
+ruff format src tests scripts
 ```
 
-Para tests de integración (necesitan stack docker + Ollama con `bge-m3`):
+Para tests de integración (necesitan Qdrant en `:6333` + Ollama con `bge-m3` en `:11434`):
 
 ```bash
-docker compose up -d
-pytest -m integration   # cuando existan
+docker compose up -d            # o apunta a tu propio Qdrant/Ollama
+pytest tests/integration -m integration   # auto-skip si los servicios no responden
 ```
+
+> Los tests de integración corren sobre una colección efímera (`mcp_memory_itest`)
+> que se crea y borra por sesión — no tocan tu colección real.
 
 ---
 
@@ -151,15 +154,23 @@ Con `FakeStore` y `FakeEmbeddings` ya disponibles en `conftest.py`. Cubre:
 
 ### 3. Cablea en `server.py`
 
-Añade el decorator junto a las otras tools — **no toques las existentes**:
+Añade el decorator junto a las otras tools — **no toques las existentes**. La
+función wrapper recibe los campos **aplanados** (un parámetro por campo) para que
+el schema MCP que ven los clientes no quede anidado; el `Input` del handler se
+reconstruye internamente:
 
 ```python
 from mcp_memory.tools.export.handler import ExportInput, export
 
 @mcp.tool(name="memory_export", description="Exportar memorias en JSONL o Markdown.")
-async def _export(inp: ExportInput) -> str:
+async def _export(namespace: str | None = None, format: str = "jsonl") -> str:
+    inp = ExportInput(namespace=namespace, format=format)
     return await export(inp, store=store)
 ```
+
+> ⚠️ No declares el parámetro como `inp: ExportInput`. Eso anida el schema bajo
+> `inp` y obliga a los clientes a llamar con `{"inp": {...}}` (regresión del
+> breaking corregido en 0.2.0).
 
 ### 4. Actualiza docs
 

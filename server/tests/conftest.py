@@ -101,6 +101,9 @@ class FakeStore(MemoryStore):
             "newest": max(m.updated_at for m in items).isoformat(),
         }
 
+    async def ping(self) -> bool:
+        return True
+
 
 def _cosine(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=False))
