@@ -195,6 +195,30 @@ async def test_delete(app):
         assert d2["deleted"] is False
 
 
+async def test_stats_no_phantom_namespace_after_delete(app):
+    """Namespace fantasma: tras borrar todos sus points no debe aparecer en memory_stats."""
+    async with Client(app) as c:
+        # (a) Guardamos una memoria en el namespace a fantasmear.
+        ghost = _data(await c.call_tool("memory_save", {
+            "content": "memoria fantasma que sera borrada",
+            "namespace": "ghost-ns",
+        }))
+        # (b) Guardamos otra en un segundo namespace para que count global > 0
+        #     y stats no haga early-return antes de llegar al facet.
+        _data(await c.call_tool("memory_save", {
+            "content": "memoria permanente en namespace real",
+            "namespace": "real-ns",
+        }))
+        # (c) Borramos el único point de ghost-ns.
+        deleted = _data(await c.call_tool("memory_delete", {"id": ghost["id"]}))
+        assert deleted["deleted"] is True
+
+        # (d) stats global no debe listar ghost-ns; real-ns sí debe aparecer.
+        st = _data(await c.call_tool("memory_stats", {}))
+        assert "ghost-ns" not in st["namespaces"]
+        assert "real-ns" in st["namespaces"]
+
+
 async def test_dim_mismatch_raises():
     """A collection created with a different vector size must fail ensure_collection."""
     reason = await _services_up()

@@ -8,6 +8,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Fixed
+- `memory_stats` ya no lista "namespaces fantasma": el facet de Qdrant devuelve hits con `count: 0` para namespaces cuyos points fueron borrados, y `stats()` no los filtraba. Detectado validando el MCP E2E desde Claude Code.
+
 ### Posibles próximos pasos
 - Soporte para `EmbeddingsClient` adicionales (OpenAI, Voyage, Cohere) en paralelo a Ollama.
 - Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra".
