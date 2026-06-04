@@ -14,9 +14,12 @@ services:
       retries: 12
 
   mcp-memory:
+    # Prod: imagen precompilada de GHCR. Dev: `docker compose build` reconstruye desde ./server.
+    # pull_policy evita que `up` buildee local cuando la imagen no está (build: tendría precedencia).
+    image: ghcr.io/germaniu/mcp-memory:latest
+    pull_policy: missing
     build:
       context: ./server
-    image: mcp-memory:0.2.0
     container_name: mcp-memory
     restart: unless-stopped
     depends_on:
@@ -26,7 +29,8 @@ services:
     environment:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
-      OLLAMA_URL: ${OLLAMA_URL:-https://ollama.com}
+      # Ollama Cloud NO ofrece embeddings — el default apunta al Ollama del host.
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       # Default: el Qdrant bundled de este compose. Para apuntar a un Qdrant
       # externo, exporta QDRANT_URL (p.ej. http://host.docker.internal:6333) y
