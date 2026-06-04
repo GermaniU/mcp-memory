@@ -26,6 +26,10 @@ class FakeStore(MemoryStore):
     def __init__(self) -> None:
         self._items: dict[str, tuple[Memory, list[float]]] = {}
 
+    async def get(self, memory_id: str) -> Memory | None:
+        item = self._items.get(memory_id)
+        return item[0] if item is not None else None
+
     async def save(self, memory: Memory, vector: list[float]) -> Memory:
         self._items[memory.id] = (memory, vector)
         return memory
