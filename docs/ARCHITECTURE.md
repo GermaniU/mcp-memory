@@ -44,7 +44,7 @@ Cada slice es **una función pura** que recibe sus dependencias por keyword argu
 ### Tests
 
 - **Unit (16)**: `tests/unit/tools/` — 1 archivo por slice, cubre happy path + 1-2 edge cases. Usan `FakeStore` y `FakeEmbeddings` (cosine sobre vector determinista de SHA-256, 16 dims).
-- **Integration (futuro)**: `tests/integration/test_e2e.py` — levanta `docker compose`, hace MCP requests, verifica round-trip. Marcado `@pytest.mark.integration`, no corre por defecto.
+- **Integration**: `tests/integration/test_e2e.py` — corre contra Qdrant + Ollama reales (localhost) vía el transporte in-memory de FastMCP (`Client(app)`), sobre una colección efímera (`mcp_memory_itest`). Cubre save→search semántico cross-keyword, update re-embed, recent ordenado, stats, delete y el error de dim mismatch. Marcado `@pytest.mark.integration`, no corre por defecto; auto-skip si los servicios no responden. Corre con `pytest tests/integration -m integration`.
 
 ### Datos
 

@@ -61,10 +61,10 @@ ollama pull nomic-embed-text    # 274MB ·  768 dim · ligero, inglés
 Verifica antes de seguir:
 
 ```bash
-curl -X POST http://localhost:11434/api/embeddings \
+curl -X POST http://localhost:11434/api/embed \
   -H 'Content-Type: application/json' \
-  -d '{"model":"bge-m3","prompt":"hola"}' | head -c 200
-# → {"embedding":[-0.13...,0.72...]}  ← debe imprimir un array de floats
+  -d '{"model":"bge-m3","input":"hola"}' | head -c 200
+# → {"embeddings":[[-0.13...,0.72...]]}  ← debe imprimir un array de vectores
 ```
 
 | Setup                                    | `OLLAMA_URL`                              | Funciona |
@@ -151,7 +151,7 @@ curl -sS -X POST http://localhost:8765/mcp \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2025-06-18' \
   -H "mcp-session-id: $SESSION" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_save","arguments":{"inp":{"content":"funciona end-to-end","namespace":"smoke","tags":["ok"]}}}}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_save","arguments":{"content":"funciona end-to-end","namespace":"smoke","tags":["ok"]}}}'
 ```
 
 ---
@@ -201,8 +201,9 @@ Detalle completo + workflow paso a paso en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q                     # 16 unit tests, <0.3s, sin Docker ni Ollama
-ruff check src tests
+pytest tests/unit -q                  # 16 unit tests, <0.3s, sin Docker ni Ollama
+pytest tests/integration -m integration   # E2E real (auto-skip si Qdrant/Ollama no están)
+ruff check src tests scripts
 ```
 
 ---
@@ -212,8 +213,11 @@ ruff check src tests
 **`401 unauthorized` desde el MCP server al hacer `memory_save`**
 - Apuntas a Ollama Cloud y tu cuenta no tiene embeddings (es lo normal hoy). Cambia `OLLAMA_URL` a Ollama local/remoto.
 
-**`404 Not Found` para `https://ollama.com/api/embeddings`**
+**`404 Not Found` para `https://ollama.com/api/embed`**
 - Mismo problema: Ollama Cloud no expone ese endpoint.
+
+**`Embedding dim mismatch` / `Collection ... has vector size N`**
+- `EMBEDDING_DIM` no coincide con la dimensión real del modelo, o reutilizaste una colección de otra dim. Ajusta `EMBEDDING_DIM` o usa una `QDRANT_COLLECTION` nueva. El server lo detecta al arrancar en vez de corromper la búsqueda.
 
 **`Connection reset by peer` al hacer `curl http://localhost:8765/mcp`**
 - Falta el header `Accept: application/json, text/event-stream`. Sin él, FastMCP cierra la conexión.

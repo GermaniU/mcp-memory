@@ -16,10 +16,10 @@ ollama pull mxbai-embed-large   # alta calidad, inglés
 ollama pull nomic-embed-text    # ligero, inglés
 
 # Verifica que responde:
-curl -X POST http://localhost:11434/api/embeddings \
+curl -X POST http://localhost:11434/api/embed \
   -H 'Content-Type: application/json' \
-  -d '{"model":"bge-m3","prompt":"hola"}' | head -c 200
-# Debe imprimir un JSON con un array {"embedding":[...]}
+  -d '{"model":"bge-m3","input":"hola"}' | head -c 200
+# Debe imprimir un JSON con {"embeddings":[[...]]} (un vector por cada input)
 ```
 
 Si esto no funciona, no sigas — el resto fallará con `401`/`404`.
@@ -90,6 +90,55 @@ python -m mcp_memory
 ```
 
 > Tip: pon esas variables en un `.env` y carga con `direnv` o `dotenv` en lugar de `export` manual.
+
+---
+
+## Modo C — Ya tengo un Qdrant (Qdrant externo)
+
+Si ya corres Qdrant (otra app, un Qdrant Cloud, un cluster compartido) **no necesitas el Qdrant bundled** del compose. Levanta solo el server apuntándolo a tu URL.
+
+> ⚠️ Usa una **colección dedicada** (`QDRANT_COLLECTION`). El server valida al arrancar que la dimensión de los vectores de la colección coincida con `EMBEDDING_DIM`; si difiere, aborta con un error claro en vez de corromper la búsqueda. No reutilices una colección que ya use otra app/dimensión.
+
+### Variante Docker (solo el service `mcp-memory`)
+
+```bash
+cp .env.example .env
+# En .env, apunta QDRANT_URL a tu Qdrant. Si corre en el host:
+#   QDRANT_URL=http://host.docker.internal:6333
+# Si es remoto:
+#   QDRANT_URL=https://qdrant.tu-dominio.com
+#   QDRANT_COLLECTION=mcp_memory
+
+# Levanta SOLO el server (no arranca el Qdrant bundled):
+docker compose up -d mcp-memory
+docker compose logs -f mcp-memory
+```
+
+### Variante proceso local
+
+Igual que el Modo B, con `QDRANT_URL` apuntando a tu Qdrant existente:
+
+```bash
+export QDRANT_URL=http://localhost:6333   # o tu URL remota
+export QDRANT_COLLECTION=mcp_memory
+python -m mcp_memory
+```
+
+El default para usuarios nuevos sigue siendo el Qdrant bundled (`docker compose up -d` arranca ambos services).
+
+---
+
+## Healthcheck
+
+El server expone `GET /health` (sin prefijo `/mcp`):
+
+```bash
+curl http://localhost:8765/health
+# {"status":"ok","qdrant":true}   -> 200 si Qdrant responde
+# {"status":"ok","qdrant":false}  -> 503 si Qdrant no responde
+```
+
+El service `mcp-memory` del compose usa este endpoint en su `healthcheck`, así que `docker compose ps` muestra `healthy`/`unhealthy` de un vistazo. El arranque es resiliente: si Qdrant todavía no está listo, el server reintenta con backoff exponencial (8 intentos, ~30s) antes de rendirse.
 
 ---
 
