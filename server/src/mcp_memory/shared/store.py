@@ -192,7 +192,8 @@ class QdrantStore:
             facet_filter=ns_filter,
             exact=True,
         )
-        namespaces = sorted(str(h.value) for h in facet.hits)
+        # Qdrant devuelve hits con count=0 para namespaces cuyos points fueron borrados.
+        namespaces = sorted(str(h.value) for h in facet.hits if h.count > 0)
 
         oldest_points, _ = await self._client.scroll(
             collection_name=self._collection,
