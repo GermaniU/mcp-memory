@@ -26,7 +26,7 @@ AI agents forget everything between conversations. Existing solutions are cloud-
 
 1. **Your memory, your machine.** Embeddings and vectors run locally. Zero data in the cloud.
 2. **Connect once, works everywhere.** It's a standard MCP server — any client that speaks MCP uses it without custom code.
-3. **Zero overhead.** `docker compose up` and you have 7 tools ready for your agent.
+3. **Zero overhead.** `docker compose up` and you have 9 tools ready for your agent.
 
 ---
 
@@ -88,6 +88,8 @@ curl -X POST http://localhost:11434/api/embed \
 | `memory_list`    | Paginated listing by namespace. |
 | `memory_recent`  | The last N entries by `updated_at`. |
 | `memory_stats`   | Count, namespaces, oldest/newest. |
+| `memory_export`  | Export all memories (or a namespace) as JSONL. Returns `count` and a `jsonl` string. |
+| `memory_import`  | Import a JSONL string produced by `memory_export`. Re-embeds each entry. Skips id collisions silently. Accepts optional `namespace_override`. |
 
 Schemas and invocation examples in [`docs/CLIENTS.md`](docs/CLIENTS.md) (in Spanish).
 
@@ -101,7 +103,7 @@ MCP Memory is deliberately small. It does **one thing well: semantic memory for 
 - ✅ Stores and retrieves **plain text** with embeddings.
 - ✅ Semantic search with `namespace` and `min_score` filters.
 - ✅ Free-form tags + metadata on every entry.
-- ✅ 7 standard MCP tools for any compatible agent.
+- ✅ 9 standard MCP tools for any compatible agent.
 - ✅ Disk persistence (Qdrant volume), backup = `tar`.
 
 ### What it does NOT do (yet)
@@ -203,7 +205,7 @@ Full details and step-by-step workflow in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q                  # 16 unit tests, <0.3s, no Docker or Ollama needed
+pytest tests/unit -q                  # 27 unit tests, <0.3s, no Docker or Ollama needed
 pytest tests/integration -m integration   # real E2E (auto-skip if Qdrant/Ollama are not running)
 ruff check src tests scripts
 ```
