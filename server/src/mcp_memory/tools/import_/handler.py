@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field, ValidationError
 
 from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
 
+# Límite de tamaño para el payload JSONL de importación.
+# 5 MB es suficiente para exportaciones normales de memoria personal;
+# evita OOM / DoS por payloads masivos.
+_MAX_IMPORT_BYTES = 5 * 1024 * 1024  # 5 MB
+
 
 class ImportInput(BaseModel):
     jsonl: str = Field(..., description="JSONL string produced by memory_export.")
@@ -44,6 +49,14 @@ async def import_memories(
     embeddings: EmbeddingsClient,
     store: MemoryStore,
 ) -> ImportResult:
+    payload_bytes = len(inp.jsonl.encode("utf-8"))
+    if payload_bytes > _MAX_IMPORT_BYTES:
+        raise ValueError(
+            f"El payload JSONL supera el límite permitido "
+            f"({payload_bytes:,} bytes > {_MAX_IMPORT_BYTES:,} bytes). "
+            "Dividí la exportación en fragmentos más pequeños."
+        )
+
     imported = 0
     skipped = 0
     errors: list[ImportLineError] = []
