@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from mcp_memory.tools.import_.handler import ImportInput, import_memories
+import pytest
+
+from mcp_memory.tools.import_.handler import _MAX_IMPORT_BYTES, ImportInput, import_memories
 from mcp_memory.tools.save.handler import SaveInput, save
 
 
@@ -108,6 +110,22 @@ async def test_import_missing_required_field_accumulates_error(embeddings, store
     assert result.imported == 0
     assert len(result.errors) == 1
     assert result.errors[0].line == 1
+
+
+async def test_import_rejects_payload_over_size_limit(embeddings, store):
+    # Crea un payload que excede _MAX_IMPORT_BYTES bytes.
+    oversized = "x" * (_MAX_IMPORT_BYTES + 1)
+    with pytest.raises(ValueError, match="límite permitido"):
+        await import_memories(ImportInput(jsonl=oversized), embeddings=embeddings, store=store)
+
+
+async def test_import_accepts_payload_at_size_limit(embeddings, store):
+    # Un payload justo en el límite no debe lanzar excepción (aunque sea JSON inválido,
+    # el error de tamaño no se lanza).
+    at_limit = "x" * _MAX_IMPORT_BYTES
+    # No debe lanzar ValueError por tamaño; puede haber errores de parseo JSON.
+    result = await import_memories(ImportInput(jsonl=at_limit), embeddings=embeddings, store=store)
+    assert result.imported == 0  # no hay líneas JSONL válidas, todo es un solo "x" continuo
 
 
 async def test_import_blank_lines_ignored(embeddings, store):
