@@ -26,7 +26,7 @@ Los agentes IA olvidan todo entre conversaciones. Las soluciones existentes son 
 
 1. **Tu memoria, tu máquina.** Embeddings + vectores corren localmente. Cero datos en la nube.
 2. **Conectas una vez, funciona en todos lados.** Es un servidor MCP estándar — cualquier cliente que hable MCP lo usa sin custom code.
-3. **Cero overhead.** `docker compose up` y tienes 7 tools listas para tu agente.
+3. **Cero overhead.** `docker compose up` y tienes 9 tools listas para tu agente.
 
 ---
 
@@ -88,6 +88,8 @@ curl -X POST http://localhost:11434/api/embed \
 | `memory_list`    | Paginado por namespace. |
 | `memory_recent`  | Las últimas N por `updated_at`. |
 | `memory_stats`   | Conteo, namespaces, oldest/newest. |
+| `memory_export`  | Exporta todas las memorias (o las de un namespace) como JSONL. Devuelve `count` y el string `jsonl`. |
+| `memory_import`  | Importa un string JSONL producido por `memory_export`. Re-embebe cada entrada. Salta colisiones de id silenciosamente. Acepta `namespace_override` opcional. |
 
 Schemas + ejemplos de invocación en [`docs/CLIENTS.md`](docs/CLIENTS.md).
 
@@ -101,7 +103,7 @@ MCP Memory es deliberadamente pequeño. Hace **una cosa bien: memoria semántica
 - ✅ Almacena y recupera **texto puro** con embeddings.
 - ✅ Búsqueda semántica con filtro por `namespace` y `min_score`.
 - ✅ Tags + metadata libres en cada entrada.
-- ✅ 7 tools MCP estándar para cualquier agente compatible.
+- ✅ 9 tools MCP estándar para cualquier agente compatible.
 - ✅ Persistencia en disco (volumen Qdrant), backup = `tar`.
 
 ### Lo que NO hace (todavía)
@@ -203,7 +205,7 @@ Detalle completo + workflow paso a paso en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q                  # 16 unit tests, <0.3s, sin Docker ni Ollama
+pytest tests/unit -q                  # 27 unit tests, <0.3s, sin Docker ni Ollama
 pytest tests/integration -m integration   # E2E real (auto-skip si Qdrant/Ollama no están)
 ruff check src tests scripts
 ```

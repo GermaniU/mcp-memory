@@ -8,16 +8,31 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
-### Fixed
-- `memory_stats` ya no lista "namespaces fantasma": el facet de Qdrant devuelve hits con `count: 0` para namespaces cuyos points fueron borrados, y `stats()` no los filtraba. Detectado validando el MCP E2E desde Claude Code.
-
 ### Posibles próximos pasos
-- Soporte para `EmbeddingsClient` adicionales (OpenAI, Voyage, Cohere) en paralelo a Ollama.
-- Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra".
-- Tool `memory_export` (JSONL/Markdown) para portabilidad.
-- Imagen oficial publicada en Docker Hub / GHCR.
+- Soporte para `EmbeddingsClient` adicionales (fastembed/ONNX primero — ver ADR cero-infra; luego OpenAI, Voyage, Cohere).
+- Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra" — ADR aprobándose.
+- Publicación en PyPI como `agent-memory-mcp`.
 
 > Estos son posibles, no garantizados. PRs bienvenidos — lee [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## [0.3.0] — 2026-06-05
+
+### Export e import de memorias (PR #14)
+
+Portabilidad completa: las memorias ahora se pueden volcar a JSONL y reimportar en otra instancia o namespace.
+
+### Added
+- **`memory_export`**: exporta todas las memorias (o un namespace) como JSONL. Pagina el store en bloques de 500 para no traer todo en RAM. Devuelve `count` (enteros exportados) y `jsonl` (string multilínea).
+- **`memory_import`**: importa un string JSONL producido por `memory_export`. Re-embebe cada entrada con el cliente de embeddings activo. Salta entradas cuyo `id` ya existe en el store (no sobreescribe). Acepta `namespace_override` para redirigir todas las entradas a un namespace distinto. Devuelve `imported`, `skipped` y `errors` (lista de `{line, error}` para líneas malformadas). Método `get(memory_id)` añadido al Protocol `MemoryStore`.
+- **11 tests unitarios nuevos** (`test_export.py` × 4, `test_import.py` × 7) — total de tests unitarios: 27.
+- **CI con GitHub Actions** (ruff + unit tests en Python 3.11/3.12/3.13 en cada PR), dependabot (pip + actions) y templates de issues/PRs.
+- **README canónico en inglés** + `README.es.md` con language switcher; badge de CI real en vez del estático.
+- **Imagen oficial publicada en GHCR** (PR #15).
+
+### Fixed
+- `memory_stats` ya no lista "namespaces fantasma": el facet de Qdrant devolvía hits con `count: 0` para namespaces cuyos points habían sido borrados, y `stats()` no los filtraba.
 
 ---
 
@@ -113,6 +128,7 @@ Primera implementación. **Eliminada del repo en 2026-05-07** (commit posterior)
 
 ---
 
-[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/GermaniU/mcp-memory/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/GermaniU/mcp-memory/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/GermaniU/mcp-memory/releases/tag/v0.1.0

@@ -28,6 +28,8 @@ Si esto no funciona, no sigas — el resto fallará con `401`/`404`.
 
 ## Modo A — Docker
 
+> La imagen está publicada en GHCR (`ghcr.io/germaniu/mcp-memory:latest`). `docker compose up -d` la descarga automáticamente — **no necesitas buildear nada**. Si quieres modificar el server, corre `docker compose build` para construir tu imagen local desde `./server`.
+
 ### Requisitos
 
 - **Docker** ≥ 24 con Compose v2.

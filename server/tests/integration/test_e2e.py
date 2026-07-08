@@ -219,6 +219,63 @@ async def test_stats_no_phantom_namespace_after_delete(app):
         assert "real-ns" in st["namespaces"]
 
 
+async def test_export_import_round_trip(app):
+    """Exportar desde un namespace, borrar origen, importar con override a otro namespace.
+
+    Este test simula el flujo real de migración: export → delete src → import to dst.
+    La colisión de IDs solo aplica si el punto sigue existiendo; tras el delete puede importarse.
+    El round-trip finaliza verificando que memory_search semántico encuentra el contenido en dst.
+    """
+    src_ns = "itest-export-src"
+    dst_ns = "itest-export-dst"
+    async with Client(app) as c:
+        # 1. Guardamos 3 memorias en el namespace origen.
+        saved_ids = []
+        for content in [
+            "El deploy de prod corre en un VPS Contabo",
+            "Qdrant almacena vectores de embeddings bge-m3",
+            "Hermes orquesta agentes especializados en tareas concretas",
+        ]:
+            r = _data(await c.call_tool("memory_save", {"content": content, "namespace": src_ns}))
+            saved_ids.append(r["id"])
+
+        # 2. Exportamos el namespace origen.
+        export_result = _data(await c.call_tool("memory_export", {"namespace": src_ns}))
+        assert export_result["count"] == 3
+        assert export_result["jsonl"]
+
+        # 3. Borramos las memorias de origen para liberar los IDs.
+        for mid in saved_ids:
+            await c.call_tool("memory_delete", {"id": mid})
+
+        # 4. Importamos con override al namespace destino — IDs ya no existen, sin colisión.
+        import_result = _data(await c.call_tool("memory_import", {
+            "jsonl": export_result["jsonl"],
+            "namespace_override": dst_ns,
+        }))
+        assert import_result["imported"] == 3
+        assert import_result["skipped"] == 0
+        assert import_result["errors"] == []
+
+        # 5. Segunda importación con los mismos IDs: ahora existen en dst → todo skipped.
+        import_again = _data(await c.call_tool("memory_import", {
+            "jsonl": export_result["jsonl"],
+            "namespace_override": dst_ns,
+        }))
+        assert import_again["imported"] == 0
+        assert import_again["skipped"] == 3
+
+        # 6. Búsqueda semántica en el namespace destino encuentra el contenido re-embedado.
+        hits = _data(await c.call_tool("memory_search", {
+            "query": "infraestructura de servidor y contenedores en produccion",
+            "namespace": dst_ns,
+            "limit": 5,
+        }))
+        assert len(hits) >= 1
+        hit_contents = [h["content"] for h in hits]
+        assert any("VPS" in ct or "Qdrant" in ct or "Hermes" in ct for ct in hit_contents)
+
+
 async def test_dim_mismatch_raises():
     """A collection created with a different vector size must fail ensure_collection."""
     reason = await _services_up()

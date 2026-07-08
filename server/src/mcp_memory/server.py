@@ -13,6 +13,8 @@ from mcp_memory.shared.embeddings import OllamaEmbeddings
 from mcp_memory.shared.store import QdrantStore
 from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
 from mcp_memory.tools.delete.handler import DeleteInput, DeleteResult, delete
+from mcp_memory.tools.export.handler import ExportInput, ExportResult, export_memories
+from mcp_memory.tools.import_.handler import ImportInput, ImportResult, import_memories
 from mcp_memory.tools.list_.handler import ListInput, list_memories
 from mcp_memory.tools.recent.handler import RecentInput, recent
 from mcp_memory.tools.save.handler import SaveInput, save
@@ -94,6 +96,16 @@ def build_app(
     @mcp.tool(name="memory_stats", description="Counts and namespace summary.")
     async def _stats(namespace: str | None = None) -> dict[str, Any]:
         return await stats(StatsInput(namespace=namespace), store=store)
+
+    @mcp.tool(name="memory_export", description="Export memories as JSONL (no vectors).")
+    async def _export(namespace: str | None = None) -> ExportResult:
+        inp = ExportInput(namespace=namespace)
+        return await export_memories(inp, store=store)
+
+    @mcp.tool(name="memory_import", description="Import memories from JSONL; re-embeds content.")
+    async def _import(jsonl: str, namespace_override: str | None = None) -> ImportResult:
+        inp = ImportInput(jsonl=jsonl, namespace_override=namespace_override)
+        return await import_memories(inp, embeddings=embeddings, store=store)
 
     @mcp.custom_route("/health", methods=["GET"])
     async def _health(request: Request) -> JSONResponse:

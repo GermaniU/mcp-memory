@@ -24,6 +24,7 @@ class EmbeddingsClient(Protocol):
 
 
 class MemoryStore(Protocol):
+    async def get(self, memory_id: str) -> Memory | None: ...
     async def save(self, memory: Memory, vector: list[float]) -> Memory: ...
     async def update(
         self,

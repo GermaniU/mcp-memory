@@ -75,6 +75,9 @@ class QdrantStore:
                     field_schema=field_schema,
                 )
 
+    async def get(self, memory_id: str) -> Memory | None:
+        return await self._fetch(memory_id)
+
     async def save(self, memory: Memory, vector: list[float]) -> Memory:
         await self._client.upsert(
             collection_name=self._collection,
