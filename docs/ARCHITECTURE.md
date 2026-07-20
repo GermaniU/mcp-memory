@@ -81,7 +81,7 @@ En Qdrant: vector + payload con todos los campos excepto `id` (que es el id del 
 ## No-goals (por ahora)
 
 - **Multi-usuario / multi-tenant**: el repo asume "una persona, una máquina". Aislamiento entre proyectos = namespaces.
-- **Auth/ACL**: solo escucha en `localhost`. Si publicas el puerto a internet, eres responsable de poner un proxy con auth.
+- **Auth/ACL**: escucha en `127.0.0.1` por defecto (tanto el servidor MCP como Qdrant). Podés sobreescribir con la variable `MCP_HOST` si necesitás exponerlo en red, pero en ese caso sos responsable de poner un proxy con auth delante.
 - **Soporte multimodal** (imágenes, PDF como blobs).
 - **Sync entre máquinas**. Backup manual con `tar` del volumen Qdrant es suficiente para 99% de casos.
 

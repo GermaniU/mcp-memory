@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://qdrant:6333"
     qdrant_collection: str = "mcp_memory"
 
-    mcp_host: str = "0.0.0.0"
+    mcp_host: str = "127.0.0.1"
     mcp_port: int = 8765
 
     default_namespace: str = "default"
