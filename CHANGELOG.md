@@ -8,6 +8,16 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Gate de faithfulness pre-persist (TKT-1291)
+
+Antes de persistir un fact, `memory_save` (namespaces gateados) y `memory_import` (siempre) lo pasan por un juez LLM engine-neutral que lo contrasta contra la realidad del sistema — comandos, paths, config — y lo bloquea si encuentra una contradicción. Motivado por el incidente `hermes reload-mcp` (2026-07-18): un comando inexistente se consolidó como fact y envenenó el recall de sesiones downstream.
+
+### Added
+- **Gate de faithfulness** (`server/src/mcp_memory/faithfulness/gate.py`): corre ANTES de persistir. `memory_import` gatea siempre cada línea; `memory_save` gatea solo namespaces en `FAITHFULNESS_GATE_NAMESPACES` (default `decisions`).
+- **Fail-closed + cola de revisión**: un `reject` del juez (contradicción) o un `held_judge_error` (timeout/parse-error/wrapper ausente) nunca se persisten — se appendean a `FAITHFULNESS_REVIEW_QUEUE` (JSONL, default `~/.mcp-memory/faithfulness-review-queue.jsonl`).
+- **`ImportResult.rejected`**: campo nuevo, aditivo — lista de `{line, verdict, reason, severity}` con los ítems retenidos por el gate. No rompe consumidores que solo miran `imported`/`skipped`/`errors`.
+- **6 env vars nuevas**: `FAITHFULNESS_GATE_NAMESPACES`, `FAITHFULNESS_REVIEW_QUEUE`, `FAITHFULNESS_RUBRIC_PATH`, `GEMINI_WRAPPER`, `HERMES_JUDGE_PROVIDER`, `GEMINI_JUDGE_FLAGS` — ver [README](README.md), sección "Faithfulness gate".
+
 ### Posibles próximos pasos
 - Soporte para `EmbeddingsClient` adicionales (fastembed/ONNX primero — ver ADR cero-infra; luego OpenAI, Voyage, Cohere).
 - Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra" — ADR aprobándose.

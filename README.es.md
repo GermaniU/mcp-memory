@@ -81,7 +81,7 @@ curl -X POST http://localhost:11434/api/embed \
 
 | Tool             | Para qué |
 |------------------|----------|
-| `memory_save`    | Guardar texto + tags + metadata. Embebe automáticamente. |
+| `memory_save`    | Guardar texto + tags + metadata. Embebe automáticamente. Los namespaces gateados (default `decisions`) pasan primero por el gate de faithfulness. |
 | `memory_search`  | Búsqueda semántica con filtro por namespace y `min_score`. |
 | `memory_update`  | Cambiar contenido/tags/metadata por id. Re-embebe si cambia el contenido. |
 | `memory_delete`  | Borrar por id. |
@@ -89,9 +89,30 @@ curl -X POST http://localhost:11434/api/embed \
 | `memory_recent`  | Las últimas N por `updated_at`. |
 | `memory_stats`   | Conteo, namespaces, oldest/newest. |
 | `memory_export`  | Exporta todas las memorias (o las de un namespace) como JSONL. Devuelve `count` y el string `jsonl`. |
-| `memory_import`  | Importa un string JSONL producido por `memory_export`. Re-embebe cada entrada. Salta colisiones de id silenciosamente. Acepta `namespace_override` opcional. |
+| `memory_import`  | Importa un string JSONL producido por `memory_export`. Re-embebe cada entrada. Salta colisiones de id silenciosamente. Acepta `namespace_override` opcional. Cada línea pasa por el gate de faithfulness; los rechazos van a `rejected` en vez de `imported`. |
 
 Schemas + ejemplos de invocación en [`docs/CLIENTS.md`](docs/CLIENTS.md).
+
+---
+
+## 🛡️ Gate de faithfulness
+
+Antes de persistir un fact, `memory_save` (namespaces gateados) y `memory_import` (siempre) lo pasan por un juez LLM engine-neutral que lo contrasta contra la realidad del sistema — flags de comandos, paths del filesystem, valores de config — y lo bloquea si el juez encuentra una contradicción. Motivado por un incidente real: un comando inexistente (`hermes reload-mcp`) se consolidó como fact y envenenó el recall de todas las sesiones downstream.
+
+- **`memory_import`** — gatea siempre, línea por línea (un import masivo es inherentemente no interactivo). Un rechazo no hace fallar todo el import: se colecciona en `ImportResult.rejected` (`{line, verdict, reason, severity}`) y el import sigue. Es un cambio de contrato aditivo — los consumidores que solo leen `imported`/`skipped`/`errors` no se ven afectados.
+- **`memory_save`** — solo gatea los namespaces listados en `FAITHFULNESS_GATE_NAMESPACES` (default: solo `decisions`, porque un save interactivo no puede esperar hasta 180s en cada llamada). Un save rechazado levanta un error de tool y no persiste nada.
+- **Fail-closed.** Si el juez hace timeout, su salida no se puede parsear, o su wrapper no está disponible, el fact se trata como `held_judge_error` — nunca se acepta, nunca se descarta en silencio. Tanto `reject` como `held_judge_error` appendean una entrada a una cola de revisión (JSONL) en vez de perderse.
+
+### Variables de entorno
+
+| Variable | Default | Qué hace |
+|---|---|---|
+| `FAITHFULNESS_GATE_NAMESPACES` | `decisions` | CSV de namespaces gateados en `memory_save`. `memory_import` ignora esto — siempre gatea. |
+| `FAITHFULNESS_REVIEW_QUEUE` | `~/.mcp-memory/faithfulness-review-queue.jsonl` | Dónde se appendean los facts rechazados/retenidos (JSONL, una entrada por línea). |
+| `FAITHFULNESS_RUBRIC_PATH` | `faithfulness/rubric.md` vendorizado | System prompt del juez. Si este host también tiene `~/.claude/skills/eval-corpus-faithfulness/`, apunta esto a la rúbrica canónica ahí para evitar drift entre las dos copias. |
+| `GEMINI_WRAPPER` | `~/.claude/hooks/gemini-run.sh` | Path al wrapper de Gemini CLI que invoca el juez. |
+| `HERMES_JUDGE_PROVIDER` | `gemini` | Proveedor del juez. Solo `gemini` está implementado hoy; `zai`/`ollama`/`claude` levantan `NotImplementedError` (solo dev — `claude` nunca es el juez de prod, a propósito: no casar con Claude CLI). |
+| `GEMINI_JUDGE_FLAGS` | `--approval-mode yolo --skip-trust -o text` | Flags para el wrapper de Gemini — headless, así nunca se cuelga esperando aprobación interactiva de tools. |
 
 ---
 

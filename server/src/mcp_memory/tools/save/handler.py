@@ -5,6 +5,12 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
+from mcp_memory.faithfulness.gate import (
+    FaithfulnessGateError,
+    append_to_review_queue,
+    gate_fact,
+    is_gated_namespace,
+)
 from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
 
 
@@ -28,11 +34,33 @@ async def save(
     if not content:
         raise ValueError("content must not be empty")
 
+    namespace = inp.namespace or default_namespace
+
+    # Gate solo namespaces "gateables" (default: decisions) — un save interactivo
+    # normal no puede esperar hasta 180s de Gemini en cada llamada. Ver
+    # is_gated_namespace() para el scope configurable (FAITHFULNESS_GATE_NAMESPACES).
+    if is_gated_namespace(namespace):
+        gate_result = gate_fact(content)
+        if gate_result["verdict"] != "accept":
+            queue_verdict = "rejected" if gate_result["verdict"] == "reject" else "held_judge_error"
+            append_to_review_queue(
+                namespace=namespace,
+                content=content,
+                verdict=queue_verdict,
+                severity=gate_result["severity"],
+                reason=gate_result["reason"],
+                source="save",
+            )
+            raise FaithfulnessGateError(
+                f"faithfulness gate {queue_verdict} (namespace={namespace!r}): "
+                f"{gate_result['reason'] or 'sin razón provista'}"
+            )
+
     now = datetime.now(UTC)
     memory = Memory(
         id=str(uuid.uuid4()),
         content=content,
-        namespace=inp.namespace or default_namespace,
+        namespace=namespace,
         tags=inp.tags,
         metadata=inp.metadata,
         created_at=now,

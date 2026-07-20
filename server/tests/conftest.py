@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
+from mcp_memory.faithfulness import gate as gate_module
 from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
 
 
@@ -124,3 +126,24 @@ def embeddings() -> FakeEmbeddings:
 @pytest.fixture
 def store() -> FakeStore:
     return FakeStore()
+
+
+@pytest.fixture(autouse=True)
+def _faithfulness_gate_accepts_by_default(monkeypatch):
+    """Bulk import (import_/handler.py) siempre gatea, y save/handler.py gatea el
+    namespace "decisions" — sin este autouse, cualquier test de la suite existente
+    que pase por esos paths dispararía un subprocess real a Gemini (TKT-1291:
+    gate_fact() -> call_provider()), con timeout de hasta 180s por línea.
+
+    Default determinista: el juez ACEPTA todo. Los tests que necesitan ejercitar
+    reject/error overridean gate_module.call_provider explícitamente — el mismo
+    fixture `monkeypatch` function-scoped permite pisar este default sin conflicto
+    (último `setattr` gana).
+    """
+    monkeypatch.setattr(
+        gate_module,
+        "call_provider",
+        lambda prompt, provider, **kw: json.dumps(
+            {"pass": True, "severity": "low", "reasoning": "autouse-accept-fixture", "claims": []}
+        ),
+    )
