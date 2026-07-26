@@ -1,4 +1,4 @@
-from mcp_memory.server import main
+from mcp_memory.cli import main
 
 if __name__ == "__main__":
     main()

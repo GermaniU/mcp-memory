@@ -42,6 +42,18 @@ cp .env.example .env && docker compose up -d
 
 Endpoint MCP: `http://localhost:8765/mcp`. Pégalo en la config de tu cliente (ver [`docs/CLIENTS.md`](docs/CLIENTS.md) — Claude Code, OpenCode, Cursor, Continue).
 
+### 🔍 Diagnóstico y Chequeo de Salud
+
+Verifica la conexión a Qdrant, Ollama, dimensiones de vectores y variables de entorno al instante:
+
+```bash
+# Nativo / Entorno virtual:
+mcp-memory check
+
+# Contenedor Docker:
+docker exec mcp-memory python -m mcp_memory check
+```
+
 ---
 
 ## ⚠️ Antes de empezar — Ollama y embeddings

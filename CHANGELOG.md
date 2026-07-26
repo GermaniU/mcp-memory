@@ -8,6 +8,17 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### `mcp-memory check` — diagnóstico de entorno + resiliencia de conexión local (PR #31)
+
+Comando CLI (`mcp-memory check` / `python -m mcp_memory check`) que verifica en un solo paso: alcance de Qdrant (colección + dimensión de vector), alcance de Ollama (modelo pulled + test de generación de vector real). Auto-fallback de host cuando corre nativo fuera de Docker sin overrides (`qdrant`/`host.docker.internal` → `localhost`), y mensajes de error accionables en `OllamaEmbeddings` (404 → sugiere `ollama pull`, 401 → nota sobre Ollama Cloud, timeouts → verificar conectividad).
+
+### Fixed
+- El auto-fallback de host chequeaba `os.environ` para decidir si el usuario había configurado `QDRANT_URL`/`OLLAMA_URL`, pero un valor puesto solo en `.env` (el mecanismo documentado) nunca toca `os.environ` — se pisaba en silencio, afectando también al arranque real del servidor, no solo a `check`. Ahora compara contra el default real de `Settings`.
+- `mcp-memory check` ignoraba en silencio un fallo de `GET /api/tags` si el test de embed subsiguiente daba 200 — podía reportar "todo OK" con Ollama parcialmente roto.
+- Se retiró la sección "Faithfulness Gate" de `check`: leía env vars (`HERMES_JUDGE_PROVIDER`, `FAITHFULNESS_GATE_NAMESPACES`) que no corresponden a ninguna funcionalidad implementada en este proyecto.
+- `OllamaEmbeddings.embed()` no capturaba `httpx.ReadTimeout` (el timeout más probable en la práctica, con el modelo cargando en frío) — ahora envuelve el error igual que el resto de fallos de red.
+- El chequeo de Qdrant en `check` usaba `AsyncQdrantClient` como context manager (`async with`), pero `qdrant-client>=1.18.0` (la versión pineada) no implementa `__aenter__`/`__aexit__` — el chequeo fallaba siempre, sin importar la salud real de Qdrant. Detectado corriendo el comando contra el stack local real (los tests mockeados no lo cazaban: el mock sí soporta el protocolo). Ahora se instancia/cierra explícitamente, igual que en `shared/store.py`.
+
 ### Posibles próximos pasos
 - Soporte para `EmbeddingsClient` adicionales (fastembed/ONNX primero — ver ADR cero-infra; luego OpenAI, Voyage, Cohere).
 - Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra" — ADR aprobándose.

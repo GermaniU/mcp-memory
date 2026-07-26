@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-mcp-memory = "mcp_memory.server:main"
+mcp-memory = "mcp_memory.cli:main"
 
 [build-system]
 requires = ["hatchling"]

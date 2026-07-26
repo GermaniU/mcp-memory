@@ -34,11 +34,43 @@ class OllamaEmbeddings:
         self._client = httpx.AsyncClient(timeout=timeout, headers=headers)
 
     async def embed(self, text: str) -> list[float]:
-        resp = await self._client.post(
-            f"{self._base_url}/api/embed",
-            json={"model": self._model, "input": text},
-        )
-        resp.raise_for_status()
+        try:
+            resp = await self._client.post(
+                f"{self._base_url}/api/embed",
+                json={"model": self._model, "input": text},
+            )
+            resp.raise_for_status()
+        except httpx.ConnectError as exc:
+            raise RuntimeError(
+                f"Could not connect to Ollama at '{self._base_url}'. "
+                f"Ensure Ollama is running ('ollama serve'). If running mcp-memory outside Docker, "
+                f"set OLLAMA_URL=http://localhost:11434."
+            ) from exc
+        except httpx.ConnectTimeout as exc:
+            raise RuntimeError(
+                f"Connection to Ollama at '{self._base_url}' timed out. "
+                f"Verify network connectivity and Ollama responsiveness."
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            raise RuntimeError(
+                f"Ollama at '{self._base_url}' timed out while generating the embedding "
+                f"(the model may be cold-loading). Try again in a few seconds, or increase "
+                f"the client timeout."
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise RuntimeError(
+                    f"Model '{self._model}' not found or /api/embed endpoint missing at "
+                    f"{self._base_url}. Run 'ollama pull {self._model}' to install the model."
+                ) from exc
+            if exc.response.status_code == 401:
+                raise RuntimeError(
+                    f"Ollama returned 401 Unauthorized for {self._base_url}. Note: Ollama Cloud "
+                    f"(ollama.com) does not support embeddings. Use a local or self-hosted Ollama."
+                ) from exc
+            raise RuntimeError(
+                f"Ollama returned HTTP {exc.response.status_code}: {exc.response.text}"
+            ) from exc
         data = resp.json()
         embeddings = data.get("embeddings")
         if not embeddings or not embeddings[0]:
