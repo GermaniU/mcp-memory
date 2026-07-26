@@ -54,13 +54,13 @@ class OllamaEmbeddings:
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 404:
                 raise RuntimeError(
-                    f"Model '{self._model}' not found or /api/embed endpoint missing at {self._base_url}. "
-                    f"Run 'ollama pull {self._model}' to install the embedding model."
+                    f"Model '{self._model}' not found or /api/embed endpoint missing at "
+                    f"{self._base_url}. Run 'ollama pull {self._model}' to install the model."
                 ) from exc
             if exc.response.status_code == 401:
                 raise RuntimeError(
-                    f"Ollama returned 401 Unauthorized for {self._base_url}. Note: Ollama Cloud (ollama.com) "
-                    f"does not support embeddings. Use a local or self-hosted Ollama instance."
+                    f"Ollama returned 401 Unauthorized for {self._base_url}. Note: Ollama Cloud "
+                    f"(ollama.com) does not support embeddings. Use a local or self-hosted Ollama."
                 ) from exc
             raise RuntimeError(
                 f"Ollama returned HTTP {exc.response.status_code}: {exc.response.text}"

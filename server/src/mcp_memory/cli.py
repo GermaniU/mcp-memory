@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+
 import httpx
 from qdrant_client import AsyncQdrantClient
 
@@ -67,7 +68,7 @@ async def run_diagnostics() -> bool:
                     all_ok = False
             else:
                 print(
-                    f"  ℹ Collection '{settings.qdrant_collection}' does not exist yet; "
+                    f"  [i] Collection '{settings.qdrant_collection}' does not exist yet; "
                     f"will be auto-created on startup."
                 )
     except Exception as exc:
@@ -123,9 +124,8 @@ async def run_diagnostics() -> bool:
             if embed_resp.status_code == 200:
                 embeddings = embed_resp.json().get("embeddings", [])
                 if embeddings and len(embeddings[0]) == settings.embedding_dim:
-                    print(
-                        f"  ✓ Embedding test successful! Returned vector dimension: {len(embeddings[0])}"
-                    )
+                    dim_len = len(embeddings[0])
+                    print(f"  ✓ Embedding test successful! Vector dim: {dim_len}")
                 else:
                     dim = len(embeddings[0]) if embeddings else 0
                     print(
@@ -134,9 +134,9 @@ async def run_diagnostics() -> bool:
                     )
                     all_ok = False
             else:
-                print(
-                    f"  ❌ Embedding request failed (HTTP {embed_resp.status_code}): {embed_resp.text}"
-                )
+                code = embed_resp.status_code
+                txt = embed_resp.text
+                print(f"  ❌ Embedding request failed (HTTP {code}): {txt}")
                 all_ok = False
     except Exception as exc:
         print(f"  ❌ Ollama check failed: {exc}")
