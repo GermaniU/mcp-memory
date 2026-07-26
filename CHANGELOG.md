@@ -8,6 +8,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Español como idioma principal del README
+
+`README.md` (la portada que GitHub muestra por default) ahora es la versión en español — el proyecto nació y se usa primero en México/LatAm, aunque sigue siendo OSS para audiencia global. El inglés se mantiene completo en `README.en.md`, con el language switcher cruzado en ambos. Sin cambios de contenido más allá del rename — paridad de secciones verificada entre ambas versiones.
+
 ### `mcp-memory check` — diagnóstico de entorno + resiliencia de conexión local (PR #31)
 
 Comando CLI (`mcp-memory check` / `python -m mcp_memory check`) que verifica en un solo paso: alcance de Qdrant (colección + dimensión de vector), alcance de Ollama (modelo pulled + test de generación de vector real). Auto-fallback de host cuando corre nativo fuera de Docker sin overrides (`qdrant`/`host.docker.internal` → `localhost`), y mensajes de error accionables en `OllamaEmbeddings` (404 → sugiere `ollama pull`, 401 → nota sobre Ollama Cloud, timeouts → verificar conectividad).
