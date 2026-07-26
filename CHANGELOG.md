@@ -17,6 +17,7 @@ Comando CLI (`mcp-memory check` / `python -m mcp_memory check`) que verifica en 
 - `mcp-memory check` ignoraba en silencio un fallo de `GET /api/tags` si el test de embed subsiguiente daba 200 — podía reportar "todo OK" con Ollama parcialmente roto.
 - Se retiró la sección "Faithfulness Gate" de `check`: leía env vars (`HERMES_JUDGE_PROVIDER`, `FAITHFULNESS_GATE_NAMESPACES`) que no corresponden a ninguna funcionalidad implementada en este proyecto.
 - `OllamaEmbeddings.embed()` no capturaba `httpx.ReadTimeout` (el timeout más probable en la práctica, con el modelo cargando en frío) — ahora envuelve el error igual que el resto de fallos de red.
+- El chequeo de Qdrant en `check` usaba `AsyncQdrantClient` como context manager (`async with`), pero `qdrant-client>=1.18.0` (la versión pineada) no implementa `__aenter__`/`__aexit__` — el chequeo fallaba siempre, sin importar la salud real de Qdrant. Detectado corriendo el comando contra el stack local real (los tests mockeados no lo cazaban: el mock sí soporta el protocolo). Ahora se instancia/cierra explícitamente, igual que en `shared/store.py`.
 
 ### Posibles próximos pasos
 - Soporte para `EmbeddingsClient` adicionales (fastembed/ONNX primero — ver ADR cero-infra; luego OpenAI, Voyage, Cohere).

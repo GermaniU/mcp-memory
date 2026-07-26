@@ -36,44 +36,50 @@ async def run_diagnostics() -> bool:
 
     # 1. Qdrant check
     print("\n[1/2] Checking Qdrant connection...")
+    # AsyncQdrantClient (qdrant-client>=1.18.0, as pinned in pyproject.toml) does not
+    # implement the async context manager protocol — `async with` raises immediately,
+    # regardless of Qdrant's actual health. Instantiate/close explicitly instead,
+    # matching the pattern already used in shared/store.py.
+    qclient = AsyncQdrantClient(url=settings.qdrant_url)
     try:
-        async with AsyncQdrantClient(url=settings.qdrant_url) as qclient:
-            collections = await qclient.get_collections()
-            names = [c.name for c in collections.collections]
-            print(f"  ✓ Qdrant is reachable. Collections found: {names or '(none)'}")
+        collections = await qclient.get_collections()
+        names = [c.name for c in collections.collections]
+        print(f"  ✓ Qdrant is reachable. Collections found: {names or '(none)'}")
 
-            if settings.qdrant_collection in names:
-                info = await qclient.get_collection(settings.qdrant_collection)
-                vectors = info.config.params.vectors
-                size = (
-                    vectors.size
-                    if hasattr(vectors, "size")
-                    else (
-                        vectors.get("").size
-                        if isinstance(vectors, dict) and "" in vectors
-                        else None
-                    )
+        if settings.qdrant_collection in names:
+            info = await qclient.get_collection(settings.qdrant_collection)
+            vectors = info.config.params.vectors
+            size = (
+                vectors.size
+                if hasattr(vectors, "size")
+                else (
+                    vectors.get("").size
+                    if isinstance(vectors, dict) and "" in vectors
+                    else None
                 )
-                if size == settings.embedding_dim:
-                    print(
-                        f"  ✓ Collection '{settings.qdrant_collection}' exists with "
-                        f"dim={size} (matches EMBEDDING_DIM)."
-                    )
-                else:
-                    print(
-                        f"  ❌ Collection '{settings.qdrant_collection}' has dim={size}, "
-                        f"but EMBEDDING_DIM is {settings.embedding_dim}!"
-                    )
-                    all_ok = False
+            )
+            if size == settings.embedding_dim:
+                print(
+                    f"  ✓ Collection '{settings.qdrant_collection}' exists with "
+                    f"dim={size} (matches EMBEDDING_DIM)."
+                )
             else:
                 print(
-                    f"  [i] Collection '{settings.qdrant_collection}' does not exist yet; "
-                    f"will be auto-created on startup."
+                    f"  ❌ Collection '{settings.qdrant_collection}' has dim={size}, "
+                    f"but EMBEDDING_DIM is {settings.embedding_dim}!"
                 )
+                all_ok = False
+        else:
+            print(
+                f"  [i] Collection '{settings.qdrant_collection}' does not exist yet; "
+                f"will be auto-created on startup."
+            )
     except Exception as exc:
         print(f"  ❌ Failed to connect to Qdrant at '{settings.qdrant_url}': {exc}")
         print("     Tip: If running outside Docker, set QDRANT_URL=http://localhost:6333")
         all_ok = False
+    finally:
+        await qclient.close()
 
     # 2. Ollama check
     print("\n[2/2] Checking Ollama connection & model...")
