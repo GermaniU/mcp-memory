@@ -28,13 +28,19 @@ def _is_in_container() -> bool:
 
 def get_settings() -> Settings:
     settings = Settings()
-    if not _is_in_container() and not os.environ.get("QDRANT_URL"):
+    # Only fall back to localhost when the value is still the Docker-only default —
+    # os.environ misses values set via .env (pydantic-settings reads .env directly
+    # into the model without touching the process environment), which silently
+    # clobbered user-configured remote QDRANT_URL/OLLAMA_URL.
+    qdrant_default = Settings.model_fields["qdrant_url"].default
+    if not _is_in_container() and settings.qdrant_url == qdrant_default:
         try:
             socket.gethostbyname("qdrant")
         except socket.gaierror:
             settings.qdrant_url = "http://localhost:6333"
 
-    if not _is_in_container() and not os.environ.get("OLLAMA_URL"):
+    ollama_default = Settings.model_fields["ollama_url"].default
+    if not _is_in_container() and settings.ollama_url == ollama_default:
         try:
             socket.gethostbyname("host.docker.internal")
         except socket.gaierror:

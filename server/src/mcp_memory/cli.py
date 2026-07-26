@@ -2,13 +2,12 @@
 
 Supports:
   mcp-memory         -> Launches the FastMCP HTTP server.
-  mcp-memory check   -> Runs environment diagnostics (Qdrant, Ollama, model dim, gate).
+  mcp-memory check   -> Runs environment diagnostics (Qdrant, Ollama, model dim).
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 
 import httpx
@@ -36,7 +35,7 @@ async def run_diagnostics() -> bool:
     all_ok = True
 
     # 1. Qdrant check
-    print("\n[1/3] Checking Qdrant connection...")
+    print("\n[1/2] Checking Qdrant connection...")
     try:
         async with AsyncQdrantClient(url=settings.qdrant_url) as qclient:
             collections = await qclient.get_collections()
@@ -77,7 +76,7 @@ async def run_diagnostics() -> bool:
         all_ok = False
 
     # 2. Ollama check
-    print("\n[2/3] Checking Ollama connection & model...")
+    print("\n[2/2] Checking Ollama connection & model...")
     try:
         headers = (
             {"Authorization": f"Bearer {settings.ollama_api_key}"}
@@ -109,6 +108,12 @@ async def run_diagnostics() -> bool:
                         f"     Available models: {', '.join(full_models) or 'none'}"
                     )
                     print(f"     Run: 'ollama pull {settings.embedding_model}'")
+            else:
+                print(
+                    f"  ❌ Failed to list Ollama models (HTTP {tags_resp.status_code}) "
+                    f"at '{settings.ollama_url}/api/tags': {tags_resp.text}"
+                )
+                all_ok = False
 
             # Embed test
             print(
@@ -145,13 +150,6 @@ async def run_diagnostics() -> bool:
             "If running outside Docker, set OLLAMA_URL=http://localhost:11434"
         )
         all_ok = False
-
-    # 3. Faithfulness Gate check
-    print("\n[3/3] Checking Faithfulness Gate configuration...")
-    judge_provider = os.environ.get("HERMES_JUDGE_PROVIDER", "gemini")
-    gate_namespaces = os.environ.get("FAITHFULNESS_GATE_NAMESPACES", "decisions")
-    print(f"  · Judge Provider:     {judge_provider}")
-    print(f"  · Gated Namespaces:   {gate_namespaces}")
 
     print("\n--------------------------------------------------")
     if all_ok:

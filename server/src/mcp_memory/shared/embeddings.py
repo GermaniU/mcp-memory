@@ -51,6 +51,12 @@ class OllamaEmbeddings:
                 f"Connection to Ollama at '{self._base_url}' timed out. "
                 f"Verify network connectivity and Ollama responsiveness."
             ) from exc
+        except httpx.ReadTimeout as exc:
+            raise RuntimeError(
+                f"Ollama at '{self._base_url}' timed out while generating the embedding "
+                f"(the model may be cold-loading). Try again in a few seconds, or increase "
+                f"the client timeout."
+            ) from exc
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 404:
                 raise RuntimeError(

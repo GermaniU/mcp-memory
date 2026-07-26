@@ -49,6 +49,28 @@ async def test_run_diagnostics_ollama_failure(respx_mock):
         assert success is False
 
 
+@pytest.mark.asyncio
+async def test_run_diagnostics_tags_failure_embed_ok_still_fails(respx_mock):
+    """Regression test: a broken /api/tags must not be masked by a healthy /api/embed —
+    'check' exists specifically to catch this kind of partial Ollama failure."""
+    from mcp_memory.shared.config import get_settings
+    settings = get_settings()
+    base_url = settings.ollama_url.rstrip('/')
+
+    respx_mock.get(f"{base_url}/api/tags").respond(status_code=500)
+    respx_mock.post(f"{base_url}/api/embed").respond(
+        json={"embeddings": [[0.1] * 1024]}
+    )
+
+    with patch("mcp_memory.cli.AsyncQdrantClient") as mock_qdrant_cls:
+        mock_client = AsyncMock()
+        mock_qdrant_cls.return_value.__aenter__.return_value = mock_client
+        mock_client.get_collections.return_value = MagicMock(collections=[])
+
+        success = await run_diagnostics()
+        assert success is False
+
+
 def test_cli_main_check_flag():
     with patch("sys.argv", ["mcp-memory", "check"]), \
          patch("mcp_memory.cli.run_diagnostics", new_callable=AsyncMock) as mock_diag, \
