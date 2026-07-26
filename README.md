@@ -40,7 +40,19 @@ cd mcp-memory
 cp .env.example .env && docker compose up -d
 ```
 
-MCP endpoint: `http://localhost:8765/mcp`. Paste it into your client's config (see [`docs/CLIENTS.md`](docs/CLIENTS.md) (in Spanish) — Claude Code, OpenCode, Cursor, Continue).
+MCP endpoint: `http://localhost:8765/mcp`. Paste it into your client's config (see [`docs/CLIENTS.md`](docs/CLIENTS.md) — Claude Code, OpenCode, Cursor, Continue).
+
+### 🔍 Diagnostics & Health Check
+
+Verify your Qdrant, Ollama, model dimensions, and environment configuration instantly:
+
+```bash
+# Native / Virtualenv:
+mcp-memory check
+
+# Docker container:
+docker exec mcp-memory python -m mcp_memory check
+```
 
 ---
 

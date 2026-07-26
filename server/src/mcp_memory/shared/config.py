@@ -1,3 +1,6 @@
+import os
+import socket
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,5 +22,23 @@ class Settings(BaseSettings):
     default_namespace: str = "default"
 
 
+def _is_in_container() -> bool:
+    return os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+
+
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if not _is_in_container() and not os.environ.get("QDRANT_URL"):
+        try:
+            socket.gethostbyname("qdrant")
+        except socket.gaierror:
+            settings.qdrant_url = "http://localhost:6333"
+
+    if not _is_in_container() and not os.environ.get("OLLAMA_URL"):
+        try:
+            socket.gethostbyname("host.docker.internal")
+        except socket.gaierror:
+            settings.ollama_url = "http://localhost:11434"
+
+    return settings
+

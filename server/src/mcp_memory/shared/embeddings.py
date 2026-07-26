@@ -34,11 +34,37 @@ class OllamaEmbeddings:
         self._client = httpx.AsyncClient(timeout=timeout, headers=headers)
 
     async def embed(self, text: str) -> list[float]:
-        resp = await self._client.post(
-            f"{self._base_url}/api/embed",
-            json={"model": self._model, "input": text},
-        )
-        resp.raise_for_status()
+        try:
+            resp = await self._client.post(
+                f"{self._base_url}/api/embed",
+                json={"model": self._model, "input": text},
+            )
+            resp.raise_for_status()
+        except httpx.ConnectError as exc:
+            raise RuntimeError(
+                f"Could not connect to Ollama at '{self._base_url}'. "
+                f"Ensure Ollama is running ('ollama serve'). If running mcp-memory outside Docker, "
+                f"set OLLAMA_URL=http://localhost:11434."
+            ) from exc
+        except httpx.ConnectTimeout as exc:
+            raise RuntimeError(
+                f"Connection to Ollama at '{self._base_url}' timed out. "
+                f"Verify network connectivity and Ollama responsiveness."
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise RuntimeError(
+                    f"Model '{self._model}' not found or /api/embed endpoint missing at {self._base_url}. "
+                    f"Run 'ollama pull {self._model}' to install the embedding model."
+                ) from exc
+            if exc.response.status_code == 401:
+                raise RuntimeError(
+                    f"Ollama returned 401 Unauthorized for {self._base_url}. Note: Ollama Cloud (ollama.com) "
+                    f"does not support embeddings. Use a local or self-hosted Ollama instance."
+                ) from exc
+            raise RuntimeError(
+                f"Ollama returned HTTP {exc.response.status_code}: {exc.response.text}"
+            ) from exc
         data = resp.json()
         embeddings = data.get("embeddings")
         if not embeddings or not embeddings[0]:
