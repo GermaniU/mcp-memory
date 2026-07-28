@@ -166,6 +166,15 @@ async def _serve(settings: Settings) -> None:
     )
     try:
         app = build_app(settings=settings, embeddings=embeddings, store=store)
+        from starlette.middleware.cors import CORSMiddleware
+        http_app = app.http_app()
+        http_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        app.http_app = lambda *args, **kwargs: http_app
         await app.run_async(transport="http", host=settings.mcp_host, port=settings.mcp_port)
     finally:
         await embeddings.aclose()
