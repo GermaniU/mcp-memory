@@ -8,6 +8,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Fixed
+- `__version__` en `server/src/mcp_memory/__init__.py` quedó desincronizado en `0.1.0` mientras `pyproject.toml` ya estaba en `0.3.0`. Sincronizado.
+- `embedding_dim` en `Settings` no tenía ningún validador: un `EMBEDDING_DIM=0` o negativo en `.env` pasaba el type-check de pydantic (son ints válidos) pero producía una colección Qdrant con `vector_size` inválido más adelante. Se agregó un `field_validator` que rechaza valores `<= 0` al arrancar, sin restringir a una lista fija de dimensiones "comunes" — el proyecto es agnóstico de modelo de embedding.
+
 ### Español como idioma principal del README
 
 `README.md` (la portada que GitHub muestra por default) ahora es la versión en español — el proyecto nació y se usa primero en México/LatAm, aunque sigue siendo OSS para audiencia global. El inglés se mantiene completo en `README.en.md`, con el language switcher cruzado en ambos. Sin cambios de contenido más allá del rename — paridad de secciones verificada entre ambas versiones.
