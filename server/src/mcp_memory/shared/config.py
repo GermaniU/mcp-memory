@@ -1,6 +1,7 @@
 import os
 import socket
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +10,13 @@ class Settings(BaseSettings):
 
     embedding_model: str = "bge-m3"
     embedding_dim: int = 1024
+
+    @field_validator("embedding_dim")
+    @classmethod
+    def _validate_embedding_dim(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(f"EMBEDDING_DIM debe ser un entero positivo, recibido: {v}")
+        return v
 
     ollama_url: str = "http://host.docker.internal:11434"
     ollama_api_key: str | None = None

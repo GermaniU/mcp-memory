@@ -2,7 +2,28 @@ from __future__ import annotations
 
 import socket
 
+import pytest
+from pydantic import ValidationError
+
 from mcp_memory.shared.config import Settings, get_settings
+
+
+def test_embedding_dim_rejects_zero_or_negative():
+    """EMBEDDING_DIM=0 o negativo es casi con certeza un typo/config rota — Qdrant
+    no puede crear una colección con vector_size inválido, así que falla rápido
+    y explícito en vez de romper recién al bootear el store."""
+    for invalid_dim in (0, -5):
+        with pytest.raises(ValidationError):
+            Settings(embedding_dim=invalid_dim)
+
+
+def test_embedding_dim_allows_any_positive_value():
+    """La validación es agnóstica de modelo: no restringe a una lista cerrada de
+    dimensiones "comunes" (384/768/1024/...) — cualquier valor positivo es válido,
+    incluso uno no estándar como 768 con un modelo distinto al default."""
+    settings = Settings(embedding_dim=768)
+
+    assert settings.embedding_dim == 768
 
 
 def test_get_settings_preserves_dotenv_qdrant_url(tmp_path, monkeypatch):
