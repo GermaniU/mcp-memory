@@ -7,7 +7,7 @@ license = { text = "MIT" }
 authors = [{ name = "Germani Asesino" }]
 
 dependencies = [
-    "fastmcp>=2.5.0",
+    "fastmcp>=3.4.4",
     "httpx>=0.27.0",
     "qdrant-client>=1.18.0",
     "pydantic>=2.7.0",
