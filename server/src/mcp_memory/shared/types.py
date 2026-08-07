@@ -16,16 +16,19 @@ class Memory(BaseModel):
     metadata: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
-    score: float | None = None
-
-
-class EmbeddingsClient(Protocol):
-    async def embed(self, text: str) -> list[float]: ...
+    score: float | None = Field(
+        None,
+        description=(
+            "Relevancia normalizada [0,1] dentro del result set de una llamada a "
+            "memory_search (BM25 vía SQLite FTS5). No es un score absoluto: no es "
+            "comparable entre llamadas distintas ni entre namespaces."
+        ),
+    )
 
 
 class MemoryStore(Protocol):
     async def get(self, memory_id: str) -> Memory | None: ...
-    async def save(self, memory: Memory, vector: list[float]) -> Memory: ...
+    async def save(self, memory: Memory) -> Memory: ...
     async def update(
         self,
         memory_id: str,
@@ -33,16 +36,14 @@ class MemoryStore(Protocol):
         content: str | None,
         tags: list[str] | None,
         metadata: dict | None,
-        vector: list[float] | None,
     ) -> Memory | None: ...
     async def delete(self, memory_id: str) -> bool: ...
     async def search(
         self,
-        vector: list[float],
+        query: str,
         *,
         namespace: str | None,
         limit: int,
-        min_score: float,
     ) -> list[Memory]: ...
     async def list_(
         self,
