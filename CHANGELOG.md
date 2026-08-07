@@ -8,9 +8,40 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+_Nada todavía._
+
+---
+
+## [0.4.0] — 2026-08-07
+
+### ⚠️ Breaking — Backend de almacenamiento: Qdrant + Ollama → SQLite + FTS5 (TKT-1470)
+
+Reemplazo completo del backend (ADR `mcp-memory-sqlite-fts5-backend`, spec-first). Motivación: cero infra externa — ya no hace falta Docker, Qdrant ni Ollama para correr el server; un único archivo SQLite local.
+
+- **Storage**: `QdrantStore` (vectores, coseno) → `SqliteFtsStore` (`aiosqlite` + tabla virtual FTS5 external-content sincronizada por triggers, ranking BM25). Ver [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
+- **`memory_search` cambia de contrato**:
+  - `min_score` **eliminado** — BM25 no tiene un umbral de similitud coseno equivalente; filtrar por relevancia ahora es responsabilidad del cliente sobre el `score` normalizado devuelto.
+  - `limit` default `10` → `20`.
+  - `score` en `Memory` sigue existiendo pero ahora es la normalización min-max `[0,1]` del `bm25()` crudo **dentro del result set de esa llamada** — no comparable entre llamadas ni namespaces distintos (antes era similitud coseno, sí comparable en ese sentido).
+  - La búsqueda pasó de **semántica** (embeddings + coseno) a **léxica** (BM25/FTS5): matchea términos, no significado.
+- **`memory_import`** ya no re-embebe cada entrada (no hay embeddings) — sigue saltando colisiones de `id` silenciosamente, sin cambios en esa parte del contrato.
+- **Variables de entorno eliminadas**: `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `OLLAMA_URL`, `OLLAMA_API_KEY`, `QDRANT_URL`, `QDRANT_COLLECTION`.
+- **Variable nueva**: `DB_PATH` (default `~/.agent-memory/memory.db`; acepta `:memory:` para instancias efímeras).
+- **`docker-compose.yml` eliminado.** Instalación ahora es `pip install -e .` / `uvx` — ver [`docs/INSTALL.md`](../docs/INSTALL.md).
+- **`GET /health`** cambia su payload: `{"status":"ok","qdrant":true|false}` → `{"status":"ok","db":true|false}`.
+- **`mcp-memory check`** reescrito: en vez de validar alcance de Qdrant/Ollama, valida soporte de FTS5 en el `sqlite3` de tu Python y accesibilidad de `DB_PATH`.
+- **Marker de pytest `integration` eliminado**: `tests/integration/` corre contra un `SqliteFtsStore` real (archivo temporal) sin ningún servicio externo — dejó de tener sentido el auto-skip. `pytest tests/integration -m integration` → `pytest tests/integration`.
+
+### Migración desde 0.3.0
+- Borra las variables `EMBEDDING_MODEL`/`EMBEDDING_DIM`/`OLLAMA_URL`/`OLLAMA_API_KEY`/`QDRANT_URL`/`QDRANT_COLLECTION` de tu `.env`; opcionalmente define `DB_PATH`.
+- Los datos en Qdrant **no migran automáticamente** — no hay ruta de conversión vector→texto plano hacia SQLite. Si necesitás conservar memoria existente, expórtala con `memory_export` (JSONL) **antes** de actualizar, y reimportala con `memory_import` sobre el nuevo backend una vez arriba.
+- Si llamabas `memory_search` con `min_score`, quita ese argumento — la tool ahora lo rechaza como campo desconocido si tu cliente MCP valida el schema estrictamente.
+- Dado de baja `docker-compose.yml`: si dependías de `docker compose up -d`, pasa a `pip install -e . && mcp-memory` (ver [`docs/INSTALL.md`](../docs/INSTALL.md)).
+
 ### Fixed
-- `__version__` en `server/src/mcp_memory/__init__.py` quedó desincronizado en `0.1.0` mientras `pyproject.toml` ya estaba en `0.3.0`. Sincronizado.
-- `embedding_dim` en `Settings` no tenía ningún validador: un `EMBEDDING_DIM=0` o negativo en `.env` pasaba el type-check de pydantic (son ints válidos) pero producía una colección Qdrant con `vector_size` inválido más adelante. Se agregó un `field_validator` que rechaza valores `<= 0` al arrancar, sin restringir a una lista fija de dimensiones "comunes" — el proyecto es agnóstico de modelo de embedding.
+- `__version__` en `server/src/mcp_memory/__init__.py` quedó desincronizado en `0.1.0` mientras `pyproject.toml` ya estaba en `0.3.0`. Sincronizado (y ambos avanzan juntos a `0.4.0` en este release).
+- `embedding_dim` en `Settings` no tenía ningún validador: un `EMBEDDING_DIM=0` o negativo en `.env` pasaba el type-check de pydantic (son ints válidos) pero producía una colección Qdrant con `vector_size` inválido más adelante. Se agregó un `field_validator` que rechazaba valores `<= 0` al arrancar. Nota: este campo y su validador se eliminan por completo en este mismo release al retirar el backend de embeddings (ver Breaking arriba) — queda documentado por trazabilidad del fix, no porque siga existiendo.
+- Agregado `CORSMiddleware` al transporte HTTP.
 
 ### Español como idioma principal del README
 
@@ -18,18 +49,17 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ### `mcp-memory check` — diagnóstico de entorno + resiliencia de conexión local (PR #31)
 
-Comando CLI (`mcp-memory check` / `python -m mcp_memory check`) que verifica en un solo paso: alcance de Qdrant (colección + dimensión de vector), alcance de Ollama (modelo pulled + test de generación de vector real). Auto-fallback de host cuando corre nativo fuera de Docker sin overrides (`qdrant`/`host.docker.internal` → `localhost`), y mensajes de error accionables en `OllamaEmbeddings` (404 → sugiere `ollama pull`, 401 → nota sobre Ollama Cloud, timeouts → verificar conectividad).
+Comando CLI (`mcp-memory check` / `python -m mcp_memory check`) que verificaba en un solo paso: alcance de Qdrant (colección + dimensión de vector), alcance de Ollama (modelo pulled + test de generación de vector real). Auto-fallback de host cuando corría nativo fuera de Docker sin overrides (`qdrant`/`host.docker.internal` → `localhost`), y mensajes de error accionables en `OllamaEmbeddings` (404 → sugiere `ollama pull`, 401 → nota sobre Ollama Cloud, timeouts → verificar conectividad). **Reescrito en este mismo release** para el backend SQLite + FTS5 (ver Breaking arriba) — el comando sigue existiendo, pero valida FTS5/`DB_PATH` en vez de Qdrant/Ollama.
 
-### Fixed
-- El auto-fallback de host chequeaba `os.environ` para decidir si el usuario había configurado `QDRANT_URL`/`OLLAMA_URL`, pero un valor puesto solo en `.env` (el mecanismo documentado) nunca toca `os.environ` — se pisaba en silencio, afectando también al arranque real del servidor, no solo a `check`. Ahora compara contra el default real de `Settings`.
+### Fixed (previo a la reescritura del backend, sobre el `check` de Qdrant/Ollama)
+- El auto-fallback de host chequeaba `os.environ` para decidir si el usuario había configurado `QDRANT_URL`/`OLLAMA_URL`, pero un valor puesto solo en `.env` (el mecanismo documentado) nunca toca `os.environ` — se pisaba en silencio, afectando también al arranque real del servidor, no solo a `check`. Se corrigió comparando contra el default real de `Settings`.
 - `mcp-memory check` ignoraba en silencio un fallo de `GET /api/tags` si el test de embed subsiguiente daba 200 — podía reportar "todo OK" con Ollama parcialmente roto.
-- Se retiró la sección "Faithfulness Gate" de `check`: leía env vars (`HERMES_JUDGE_PROVIDER`, `FAITHFULNESS_GATE_NAMESPACES`) que no corresponden a ninguna funcionalidad implementada en este proyecto.
-- `OllamaEmbeddings.embed()` no capturaba `httpx.ReadTimeout` (el timeout más probable en la práctica, con el modelo cargando en frío) — ahora envuelve el error igual que el resto de fallos de red.
-- El chequeo de Qdrant en `check` usaba `AsyncQdrantClient` como context manager (`async with`), pero `qdrant-client>=1.18.0` (la versión pineada) no implementa `__aenter__`/`__aexit__` — el chequeo fallaba siempre, sin importar la salud real de Qdrant. Detectado corriendo el comando contra el stack local real (los tests mockeados no lo cazaban: el mock sí soporta el protocolo). Ahora se instancia/cierra explícitamente, igual que en `shared/store.py`.
+- Se retiró la sección "Faithfulness Gate" de `check`: leía env vars (`HERMES_JUDGE_PROVIDER`, `FAITHFULNESS_GATE_NAMESPACES`) que no correspondían a ninguna funcionalidad implementada en este proyecto.
+- `OllamaEmbeddings.embed()` no capturaba `httpx.ReadTimeout` (el timeout más probable en la práctica, con el modelo cargando en frío) — se corrigió envolviendo el error igual que el resto de fallos de red.
+- El chequeo de Qdrant en `check` usaba `AsyncQdrantClient` como context manager (`async with`), pero `qdrant-client>=1.18.0` (la versión pineada) no implementaba `__aenter__`/`__aexit__` — el chequeo fallaba siempre, sin importar la salud real de Qdrant. Se corrigió instanciando/cerrando explícitamente, igual que en `shared/store.py` de entonces.
 
 ### Posibles próximos pasos
-- Soporte para `EmbeddingsClient` adicionales (fastembed/ONNX primero — ver ADR cero-infra; luego OpenAI, Voyage, Cohere).
-- Modo Qdrant embedded (sin docker, archivo en disco) para "instalación cero infra" — ADR aprobándose.
+- Backend de embeddings opcional (semántico) como alternativa configurable a BM25, si aparece un caso de uso real que lo justifique — no como default.
 - Publicación en PyPI como `agent-memory-mcp`.
 
 > Estos son posibles, no garantizados. PRs bienvenidos — lee [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -147,7 +177,8 @@ Primera implementación. **Eliminada del repo en 2026-05-07** (commit posterior)
 
 ---
 
-[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/GermaniU/mcp-memory/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/GermaniU/mcp-memory/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/GermaniU/mcp-memory/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/GermaniU/mcp-memory/releases/tag/v0.1.0

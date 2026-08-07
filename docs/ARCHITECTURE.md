@@ -8,10 +8,9 @@
 server/src/mcp_memory/
 ├── server.py                 # composition root: wiring FastMCP + dependencias
 ├── shared/                   # solo lo verdaderamente compartido
-│   ├── config.py             # pydantic-settings, .env
-│   ├── embeddings.py         # OllamaEmbeddings (httpx)
-│   ├── store.py              # QdrantStore (qdrant-client async)
-│   └── types.py              # Memory + Protocols (EmbeddingsClient, MemoryStore)
+│   ├── config.py             # pydantic-settings, .env (DB_PATH, MCP_HOST/PORT, DEFAULT_NAMESPACE)
+│   ├── store.py               # SqliteFtsStore (aiosqlite + SQLite FTS5)
+│   └── types.py               # Memory + Protocol (MemoryStore)
 └── tools/                    # 1 carpeta = 1 slice MCP
     ├── save/handler.py       # SaveInput + async save(...)
     ├── search/handler.py
@@ -19,32 +18,34 @@ server/src/mcp_memory/
     ├── list_/handler.py
     ├── update/handler.py
     ├── recent/handler.py
-    └── stats/handler.py
+    ├── stats/handler.py
+    ├── export/handler.py
+    └── import_/handler.py
 ```
 
 Cada slice es **una función pura** que recibe sus dependencias por keyword arguments. Esto significa:
 
-- **Test unitario sin Docker**: `pytest tests/unit` corre con un `FakeStore` y `FakeEmbeddings` in-memory. 16 tests, <0.3s.
+- **Test unitario sin infra externa**: `pytest tests/unit` corre con un `FakeStore` in-memory. 60 tests, <1s.
 - **Añadir una tool nueva**: una carpeta nueva en `tools/`, un decorador `@mcp.tool` en `server.py`. Cero acoplamiento con las existentes (OCP).
 
 ### SOLID, sin sobreingeniería
 
-- **SRP**: cada handler hace una cosa. `EmbeddingsClient` solo embebe. `MemoryStore` solo persiste.
-- **DIP**: handlers dependen de `Protocol` (`EmbeddingsClient`, `MemoryStore`), no de `OllamaEmbeddings`/`QdrantStore`. Por eso los fakes son triviales — no requieren herencia.
+- **SRP**: cada handler hace una cosa. `MemoryStore` solo persiste y busca.
+- **DIP**: handlers dependen del `Protocol` `MemoryStore`, no de `SqliteFtsStore` directamente. Por eso el `FakeStore` de los tests es trivial — no requiere herencia.
 - **OCP**: `tools/` es abierto a extensión, cerrado a modificación. Añadir una tool ≠ tocar otras.
 - **Sin** factories, builders, registries dinámicos. Wiring explícito en `server.build_app`.
 
 ### KISS + YAGNI
 
-- Una sola colección Qdrant; namespaces se filtran por payload con índice keyword. Sin colecciones por namespace ni por usuario. Suficiente hasta los millones de vectores.
-- `recent` y `stats` resuelven server-side en Qdrant (desde 0.2.0): `recent` usa `scroll` con `OrderBy(updated_at, DESC)` y `limit` real; `stats` usa `count(exact=True)`, `facet(key="namespace")` y dos `scroll` de `limit=1` para oldest/newest. En 0.1.0 era scroll completo + sort en Python — se optimizó cuando dejó de alcanzar, no antes (YAGNI aplicado en ambas direcciones).
+- Un único archivo SQLite; namespaces se filtran por columna indexada (`idx_memories_namespace`). Sin bases de datos por namespace ni por usuario.
+- `recent` y `stats` resuelven server-side con SQL directo (`ORDER BY updated_at DESC LIMIT`, `COUNT`/`DISTINCT`) — sin traer todo a Python para ordenar.
 - El servidor expone solo `streamable-http`. stdio se añade cuando un usuario real lo pida.
-- Modelo de embeddings inyectable vía `.env`, dimensión también. No hay "registry de modelos".
+- `DB_PATH` inyectable vía `.env`. No hay "registry de backends" — cuando exista una segunda implementación real de `MemoryStore` se evaluará la abstracción, no antes (YAGNI aplicado en ambas direcciones: se removió `EmbeddingsClient` por completo en TKT-1470 en vez de dejarlo como abstracción muerta).
 
 ### Tests
 
-- **Unit (16)**: `tests/unit/tools/` — 1 archivo por slice, cubre happy path + 1-2 edge cases. Usan `FakeStore` y `FakeEmbeddings` (cosine sobre vector determinista de SHA-256, 16 dims).
-- **Integration**: `tests/integration/test_e2e.py` — corre contra Qdrant + Ollama reales (localhost) vía el transporte in-memory de FastMCP (`Client(app)`), sobre una colección efímera (`mcp_memory_itest`). Cubre save→search semántico cross-keyword, update re-embed, recent ordenado, stats, delete y el error de dim mismatch. Marcado `@pytest.mark.integration`, no corre por defecto; auto-skip si los servicios no responden. Corre con `pytest tests/integration -m integration`.
+- **Unit (60)**: `tests/unit/` — `test_store.py` cubre `SqliteFtsStore` contra `:memory:` (schema, CRUD, ranking BM25, normalización de score, escape de sintaxis FTS5); `test_config.py` y `test_cli.py` cubren `Settings`/`mcp-memory check`; `tests/unit/tools/` tiene 1 archivo por slice con `FakeStore` (búsqueda léxica simple por overlap de tokens, no BM25 real — el contrato del handler no depende del motor de ranking).
+- **Integration (14)**: `tests/integration/test_e2e.py` — corre contra un `SqliteFtsStore` **real** (archivo temporal) vía el transporte in-memory de FastMCP (`Client(app)`), sin mocks y sin ningún servicio externo. Cubre save→search con ranking BM25, update que re-sincroniza el índice FTS5, recent ordenado, stats, delete, export/import y el escape de sintaxis especial de FTS5 en la query. Corre siempre — no tiene marker de skip: `pytest tests/integration`.
 
 ### Datos
 
@@ -56,33 +57,41 @@ Memory {
   tags: list[str]
   metadata: dict
   created_at, updated_at: datetime UTC
-  score: float | None  # solo en respuestas de search
+  score: float | None  # solo en respuestas de search; normalizado [0,1] dentro
+                        # del result set de esa llamada — NO comparable entre
+                        # llamadas ni namespaces distintos
 }
 ```
 
-En Qdrant: vector + payload con todos los campos excepto `id` (que es el id del point) y `score` (calculado al buscar). `created_at`/`updated_at` se serializan como floats (epoch seconds) para indexar fácilmente.
+**Schema SQLite** (`shared/store.py::_SCHEMA_SQL`, idempotente vía `IF NOT EXISTS`):
+
+- **`memories`** — tabla normal, fuente de verdad. `id TEXT PRIMARY KEY`, `content`, `namespace`, `tags`/`metadata` serializados como JSON (`TEXT`), `created_at`/`updated_at` como epoch float. Índices B-tree en `namespace`, `updated_at`, `created_at`.
+- **`memories_fts`** — tabla virtual FTS5 **external content** (`content='memories'`, `content_rowid='rowid'`), tokenizer `unicode61 remove_diacritics 2` (búsqueda insensible a mayúsculas/acentos) con `tokenchars '-_'` para no partir identificadores tipo `X-Api-Key`. No duplica datos: solo indexa `content` + `tags`.
+- **Triggers `memories_ai`/`memories_ad`/`memories_au`** — mantienen `memories_fts` sincronizada en cada INSERT/DELETE/UPDATE de `memories`, automáticamente y en la misma transacción. No hay reindexado manual ni background job.
 
 ### Flujo `memory_save`
 
 1. Cliente MCP llama `memory_save(content, namespace?, tags?, metadata?)`.
 2. Handler valida (Pydantic) y rechaza contenido vacío.
 3. Genera UUID v4 y timestamps.
-4. Llama `embeddings.embed(content)` → vector de `EMBEDDING_DIM` floats.
-5. `store.save(memory, vector)` hace `upsert` en Qdrant.
-6. Devuelve la `Memory` resultante al cliente.
+4. `store.save(memory)` hace `INSERT` en `memories`; el trigger `memories_ai` inserta la fila espejo en `memories_fts`.
+5. Devuelve la `Memory` resultante al cliente.
 
 ### Flujo `memory_search`
 
-1. Cliente llama `memory_search(query, namespace?, limit, min_score)`.
-2. `embeddings.embed(query)` → vector.
-3. `store.search(...)` ejecuta `query_points` con `score_threshold` y filtro por `namespace` (índice keyword).
-4. Devuelve `[Memory]` ordenadas por similitud descendente, cada una con `score`.
+1. Cliente llama `memory_search(query, namespace?, limit)`.
+2. El handler pasa `query` tal cual al store — no hay paso de embedding.
+3. `store.search(...)` tokeniza la query y construye un `match_expr` de FTS5 donde **cada token se escapa y envuelve en comillas dobles**, unidos con `OR` — neutraliza cualquier sintaxis especial de FTS5 (`AND`/`OR`/`NOT`/`NEAR`, `*`, `:`, `-`) tratándola como texto literal, maximizando recall en vez de fallar la query completa.
+4. Ejecuta `SELECT ... FROM memories_fts JOIN memories ... WHERE memories_fts MATCH :match_expr AND namespace = :namespace ORDER BY bm25(memories_fts) ASC LIMIT :limit` (BM25 de SQLite: más negativo = más relevante).
+5. Normaliza los `raw_score` de la página de resultados a `[0,1]` con min-max **dentro de esa misma llamada** (no hay un score absoluto comparable entre búsquedas).
+6. Devuelve `[Memory]` ordenadas por relevancia descendente, cada una con `score`.
 
 ## No-goals (por ahora)
 
+- **Búsqueda semántica.** BM25/FTS5 es léxico — matchea términos, no significado. Si el caso de uso real lo exige (paráfrasis sin overlap de vocabulario), se evaluará un backend de embeddings de vuelta, pero como opción configurable, no como default (ver ADR `mcp-memory-sqlite-fts5-backend`).
 - **Multi-usuario / multi-tenant**: el repo asume "una persona, una máquina". Aislamiento entre proyectos = namespaces.
-- **Auth/ACL**: escucha en `127.0.0.1` por defecto (tanto el servidor MCP como Qdrant). Podés sobreescribir con la variable `MCP_HOST` si necesitás exponerlo en red, pero en ese caso sos responsable de poner un proxy con auth delante.
+- **Auth/ACL**: escucha en `127.0.0.1` por defecto. Podés sobreescribir con la variable `MCP_HOST` si necesitás exponerlo en red, pero en ese caso sos responsable de poner un proxy con auth delante.
 - **Soporte multimodal** (imágenes, PDF como blobs).
-- **Sync entre máquinas**. Backup manual con `tar` del volumen Qdrant es suficiente para 99% de casos.
+- **Sync entre máquinas**. El archivo SQLite es autocontenido — copiarlo (o `sqlite3 .backup`) es suficiente para 99% de casos.
 
 Si alguno de estos se vuelve necesario, abre un issue con caso de uso real (no especulativo).

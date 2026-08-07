@@ -6,16 +6,16 @@ Convenciones del proyecto para sesiones de Claude Code.
 
 ## Stack
 
-- **Python 3.11+** · FastMCP (Streamable HTTP) · Qdrant · Ollama embeddings.
+- **Python 3.11+** · FastMCP (Streamable HTTP) · SQLite + FTS5 (BM25 léxico), cero infra externa.
 - **Arquitectura vertical slice**: cada tool vive en `server/src/mcp_memory/tools/<tool>/handler.py`. Añadir una tool = añadir una carpeta + un decorator en `server.py`.
-- **Tests**: `pytest tests/unit -q` (unit, sin Docker, <0.3s). `pytest tests/integration -m integration` (requiere Qdrant + Ollama corriendo).
+- **Tests**: `pytest tests/unit -q` (unit, sin infra externa, <1s). `pytest tests/integration` (E2E real contra SQLite/FTS5 — corre siempre, sin marker ni servicios externos que levantar).
 - **Linting**: `ruff check src tests scripts`.
 
 ## Convenciones de código
 
 - Identifiers en **inglés**. Comentarios y commits en **español**.
 - Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`.
-- **DIP**: dependencias externas (store, embeddings) detrás de `Protocol` — los tests no deben requerir Docker.
+- **DIP**: dependencias externas (store) detrás de `Protocol` — los tests no deben requerir servicios externos.
 - Sin abstracciones especulativas (YAGNI).
 
 ## Regla anti-drift de docs
