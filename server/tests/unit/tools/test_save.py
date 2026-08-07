@@ -3,10 +3,9 @@ import pytest
 from mcp_memory.tools.save.handler import SaveInput, save
 
 
-async def test_save_returns_memory_with_generated_id_and_timestamps(embeddings, store):
+async def test_save_returns_memory_with_generated_id_and_timestamps(store):
     out = await save(
         SaveInput(content="recordar a juan"),
-        embeddings=embeddings,
         store=store,
         default_namespace="default",
     )
@@ -16,10 +15,9 @@ async def test_save_returns_memory_with_generated_id_and_timestamps(embeddings, 
     assert out.created_at == out.updated_at
 
 
-async def test_save_uses_explicit_namespace_and_tags(embeddings, store):
+async def test_save_uses_explicit_namespace_and_tags(store):
     out = await save(
         SaveInput(content="x", namespace="flowordr", tags=["bug", "auth"]),
-        embeddings=embeddings,
         store=store,
         default_namespace="default",
     )
@@ -27,11 +25,10 @@ async def test_save_uses_explicit_namespace_and_tags(embeddings, store):
     assert out.tags == ["bug", "auth"]
 
 
-async def test_save_rejects_empty_content(embeddings, store):
+async def test_save_rejects_empty_content(store):
     with pytest.raises(ValueError):
         await save(
             SaveInput(content="   "),
-            embeddings=embeddings,
             store=store,
             default_namespace="default",
         )
