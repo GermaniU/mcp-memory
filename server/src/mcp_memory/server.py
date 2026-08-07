@@ -9,9 +9,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from mcp_memory.shared.config import Settings, get_settings
-from mcp_memory.shared.embeddings import OllamaEmbeddings
-from mcp_memory.shared.store import QdrantStore
-from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
+from mcp_memory.shared.store import SqliteFtsStore
+from mcp_memory.shared.types import Memory, MemoryStore
 from mcp_memory.tools.delete.handler import DeleteInput, DeleteResult, delete
 from mcp_memory.tools.export.handler import ExportInput, ExportResult, export_memories
 from mcp_memory.tools.import_.handler import ImportInput, ImportResult, import_memories
@@ -28,7 +27,6 @@ logger = logging.getLogger("mcp_memory")
 def build_app(
     *,
     settings: Settings,
-    embeddings: EmbeddingsClient,
     store: MemoryStore,
 ) -> FastMCP:
     """Compose the FastMCP app. Pure wiring — no business logic here.
@@ -49,19 +47,18 @@ def build_app(
         inp = SaveInput(
             content=content, namespace=namespace, tags=tags or [], metadata=metadata or {}
         )
-        return await save(
-            inp, embeddings=embeddings, store=store, default_namespace=settings.default_namespace
-        )
+        return await save(inp, store=store, default_namespace=settings.default_namespace)
 
-    @mcp.tool(name="memory_search", description="Semantic search across stored memories.")
+    @mcp.tool(
+        name="memory_search", description="Lexical (BM25/FTS5) search across stored memories."
+    )
     async def _search(
         query: str,
         namespace: str | None = None,
-        limit: int = 10,
-        min_score: float = 0.0,
+        limit: int = 20,
     ) -> list[Memory]:
-        inp = SearchInput(query=query, namespace=namespace, limit=limit, min_score=min_score)
-        return await search(inp, embeddings=embeddings, store=store)
+        inp = SearchInput(query=query, namespace=namespace, limit=limit)
+        return await search(inp, store=store)
 
     @mcp.tool(name="memory_delete", description="Delete a memory by id.")
     async def _delete(id: str) -> DeleteResult:
@@ -86,7 +83,7 @@ def build_app(
         metadata: dict | None = None,
     ) -> Memory | None:
         inp = UpdateInput(id=id, content=content, tags=tags, metadata=metadata)
-        return await update(inp, embeddings=embeddings, store=store)
+        return await update(inp, store=store)
 
     @mcp.tool(name="memory_recent", description="Most recently updated memories.")
     async def _recent(namespace: str | None = None, limit: int = 10) -> list[Memory]:
@@ -102,70 +99,30 @@ def build_app(
         inp = ExportInput(namespace=namespace)
         return await export_memories(inp, store=store)
 
-    @mcp.tool(name="memory_import", description="Import memories from JSONL; re-embeds content.")
+    @mcp.tool(
+        name="memory_import",
+        description="Import memories from JSONL (skips ids that already exist).",
+    )
     async def _import(jsonl: str, namespace_override: str | None = None) -> ImportResult:
         inp = ImportInput(jsonl=jsonl, namespace_override=namespace_override)
-        return await import_memories(inp, embeddings=embeddings, store=store)
+        return await import_memories(inp, store=store)
 
     @mcp.custom_route("/health", methods=["GET"])
     async def _health(request: Request) -> JSONResponse:
-        qdrant_ok = await store.ping()
+        db_ok = await store.ping()
         return JSONResponse(
-            {"status": "ok", "qdrant": qdrant_ok},
-            status_code=200 if qdrant_ok else 503,
+            {"status": "ok", "db": db_ok},
+            status_code=200 if db_ok else 503,
         )
 
     return mcp
 
 
-async def _ensure_collection_with_retry(
-    store: QdrantStore, *, attempts: int = 8, base_delay: float = 0.5
-) -> None:
-    """Boot resilience: Qdrant may not be ready yet. Exponential backoff.
-
-    Dim-mismatch / config errors (RuntimeError) are NOT retried — they won't fix
-    themselves and should fail fast with a clear message.
-    """
-    delay = base_delay
-    for attempt in range(1, attempts + 1):
-        try:
-            await store.ensure_collection()
-            logger.info("Qdrant collection ready (attempt %d/%d)", attempt, attempts)
-            return
-        except RuntimeError:
-            raise
-        except Exception as exc:  # connection refused, timeout, etc.
-            if attempt == attempts:
-                logger.error(
-                    "Qdrant not reachable after %d attempts: %s", attempts, exc
-                )
-                raise
-            logger.warning(
-                "Qdrant not ready (attempt %d/%d): %s — retrying in %.1fs",
-                attempt,
-                attempts,
-                exc,
-                delay,
-            )
-            await anyio.sleep(delay)
-            delay = min(delay * 2, 30.0)
-
-
 async def _serve(settings: Settings) -> None:
-    store = QdrantStore(
-        url=settings.qdrant_url,
-        collection=settings.qdrant_collection,
-        dim=settings.embedding_dim,
-    )
-    await _ensure_collection_with_retry(store)
-    embeddings = OllamaEmbeddings(
-        base_url=settings.ollama_url,
-        model=settings.embedding_model,
-        api_key=settings.ollama_api_key,
-        expected_dim=settings.embedding_dim,
-    )
+    store = SqliteFtsStore(db_path=settings.db_path)
+    await store.ensure_schema()
     try:
-        app = build_app(settings=settings, embeddings=embeddings, store=store)
+        app = build_app(settings=settings, store=store)
         from starlette.middleware.cors import CORSMiddleware
         http_app = app.http_app()
         http_app.add_middleware(
@@ -177,7 +134,6 @@ async def _serve(settings: Settings) -> None:
         app.http_app = lambda *args, **kwargs: http_app
         await app.run_async(transport="http", host=settings.mcp_host, port=settings.mcp_port)
     finally:
-        await embeddings.aclose()
         await store.aclose()
 
 

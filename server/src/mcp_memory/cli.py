@@ -2,16 +2,15 @@
 
 Supports:
   mcp-memory         -> Launches the FastMCP HTTP server.
-  mcp-memory check   -> Runs environment diagnostics (Qdrant, Ollama, model dim).
+  mcp-memory check   -> Runs environment diagnostics (FTS5, db_path).
 """
 
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import sys
-
-import httpx
-from qdrant_client import AsyncQdrantClient
+from pathlib import Path
 
 from mcp_memory.server import main as server_main
 from mcp_memory.shared.config import get_settings
@@ -23,139 +22,60 @@ async def run_diagnostics() -> bool:
     print(" MCP Memory Diagnostics (mcp-memory check)")
     print("==================================================")
     print("Config:")
-    print(f"  · QDRANT_URL:         {settings.qdrant_url}")
-    print(f"  · QDRANT_COLLECTION:  {settings.qdrant_collection}")
-    print(f"  · OLLAMA_URL:         {settings.ollama_url}")
-    print(f"  · EMBEDDING_MODEL:    {settings.embedding_model}")
-    print(f"  · EMBEDDING_DIM:      {settings.embedding_dim}")
+    print(f"  · DB_PATH:            {settings.db_path}")
     print(f"  · MCP_HOST/PORT:      {settings.mcp_host}:{settings.mcp_port}")
     print(f"  · DEFAULT_NAMESPACE:  {settings.default_namespace}")
     print("--------------------------------------------------")
 
     all_ok = True
 
-    # 1. Qdrant check
-    print("\n[1/2] Checking Qdrant connection...")
-    # AsyncQdrantClient (qdrant-client>=1.18.0, as pinned in pyproject.toml) does not
-    # implement the async context manager protocol — `async with` raises immediately,
-    # regardless of Qdrant's actual health. Instantiate/close explicitly instead,
-    # matching the pattern already used in shared/store.py.
-    qclient = AsyncQdrantClient(url=settings.qdrant_url)
+    # 1. FTS5 compiled in this Python's sqlite3 module.
+    print("\n[1/2] Checking SQLite FTS5 support...")
     try:
-        collections = await qclient.get_collections()
-        names = [c.name for c in collections.collections]
-        print(f"  ✓ Qdrant is reachable. Collections found: {names or '(none)'}")
-
-        if settings.qdrant_collection in names:
-            info = await qclient.get_collection(settings.qdrant_collection)
-            vectors = info.config.params.vectors
-            size = (
-                vectors.size
-                if hasattr(vectors, "size")
-                else (
-                    vectors.get("").size
-                    if isinstance(vectors, dict) and "" in vectors
-                    else None
-                )
-            )
-            if size == settings.embedding_dim:
-                print(
-                    f"  ✓ Collection '{settings.qdrant_collection}' exists with "
-                    f"dim={size} (matches EMBEDDING_DIM)."
-                )
-            else:
-                print(
-                    f"  ❌ Collection '{settings.qdrant_collection}' has dim={size}, "
-                    f"but EMBEDDING_DIM is {settings.embedding_dim}!"
-                )
-                all_ok = False
-        else:
-            print(
-                f"  [i] Collection '{settings.qdrant_collection}' does not exist yet; "
-                f"will be auto-created on startup."
-            )
-    except Exception as exc:
-        print(f"  ❌ Failed to connect to Qdrant at '{settings.qdrant_url}': {exc}")
-        print("     Tip: If running outside Docker, set QDRANT_URL=http://localhost:6333")
-        all_ok = False
-    finally:
-        await qclient.close()
-
-    # 2. Ollama check
-    print("\n[2/2] Checking Ollama connection & model...")
-    try:
-        headers = (
-            {"Authorization": f"Bearer {settings.ollama_api_key}"}
-            if settings.ollama_api_key
-            else {}
-        )
-        async with httpx.AsyncClient(timeout=10.0, headers=headers) as http_client:
-            tags_resp = await http_client.get(
-                f"{settings.ollama_url.rstrip('/')}/api/tags"
-            )
-            if tags_resp.status_code == 200:
-                models = [
-                    m.get("name", "").split(":")[0]
-                    for m in tags_resp.json().get("models", [])
-                ]
-                full_models = [
-                    m.get("name", "") for m in tags_resp.json().get("models", [])
-                ]
-                print(f"  ✓ Ollama is reachable at '{settings.ollama_url}'.")
-
-                target_base = settings.embedding_model.split(":")[0]
-                if target_base in models or settings.embedding_model in full_models:
-                    print(f"  ✓ Model '{settings.embedding_model}' is pulled.")
-                else:
-                    print(
-                        f"  ⚠️ Model '{settings.embedding_model}' is not listed in Ollama tags."
-                    )
-                    print(
-                        f"     Available models: {', '.join(full_models) or 'none'}"
-                    )
-                    print(f"     Run: 'ollama pull {settings.embedding_model}'")
-            else:
-                print(
-                    f"  ❌ Failed to list Ollama models (HTTP {tags_resp.status_code}) "
-                    f"at '{settings.ollama_url}/api/tags': {tags_resp.text}"
-                )
-                all_ok = False
-
-            # Embed test
-            print(
-                f"  Testing embedding generation with model '{settings.embedding_model}'..."
-            )
-            embed_resp = await http_client.post(
-                f"{settings.ollama_url.rstrip('/')}/api/embed",
-                json={
-                    "model": settings.embedding_model,
-                    "input": "mcp-memory check test",
-                },
-            )
-            if embed_resp.status_code == 200:
-                embeddings = embed_resp.json().get("embeddings", [])
-                if embeddings and len(embeddings[0]) == settings.embedding_dim:
-                    dim_len = len(embeddings[0])
-                    print(f"  ✓ Embedding test successful! Vector dim: {dim_len}")
-                else:
-                    dim = len(embeddings[0]) if embeddings else 0
-                    print(
-                        f"  ❌ Vector dim mismatch! Model returned {dim} dims, "
-                        f"but EMBEDDING_DIM is {settings.embedding_dim}."
-                    )
-                    all_ok = False
-            else:
-                code = embed_resp.status_code
-                txt = embed_resp.text
-                print(f"  ❌ Embedding request failed (HTTP {code}): {txt}")
-                all_ok = False
-    except Exception as exc:
-        print(f"  ❌ Ollama check failed: {exc}")
+        conn = sqlite3.connect(":memory:")
+        try:
+            conn.execute("CREATE VIRTUAL TABLE t USING fts5(x)")
+            print("  ✓ FTS5 is compiled in this Python's sqlite3 module.")
+        finally:
+            conn.close()
+    except sqlite3.OperationalError as exc:
+        print(f"  ❌ FTS5 not available: {exc}")
         print(
-            "     Tip: Ensure Ollama is running ('ollama serve'). "
-            "If running outside Docker, set OLLAMA_URL=http://localhost:11434"
+            "     Tip: use Homebrew/python.org Python (macOS/Windows), or install "
+            "libsqlite3-dev before compiling Python (Linux, pyenv/asdf)."
         )
         all_ok = False
+
+    # 2. db_path resolved, parent dir writable, current row count.
+    print("\n[2/2] Checking DB_PATH...")
+    if settings.db_path == ":memory:":
+        print("  [i] DB_PATH is ':memory:' — ephemeral, nothing to check on disk.")
+    else:
+        db_path = Path(settings.db_path)
+        try:
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"  ✓ Parent directory is writable: {db_path.parent}")
+        except OSError as exc:
+            print(f"  ❌ Cannot create/write parent directory '{db_path.parent}': {exc}")
+            all_ok = False
+        else:
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(str(db_path))
+                    try:
+                        cursor = conn.execute("SELECT COUNT(*) FROM memories")
+                        count = cursor.fetchone()[0]
+                        print(f"  ✓ Database exists at '{db_path}' — {count} memories stored.")
+                    finally:
+                        conn.close()
+                except sqlite3.OperationalError as exc:
+                    print(
+                        f"  ⚠️  Database file exists at '{db_path}' but could not be read: {exc}"
+                    )
+                    print("     It will be initialized on next server start (ensure_schema()).")
+            else:
+                print(f"  [i] Database file does not exist yet at '{db_path}'.")
+                print("     A fresh DB with 0 memories will be created on server start.")
 
     print("\n--------------------------------------------------")
     if all_ok:
