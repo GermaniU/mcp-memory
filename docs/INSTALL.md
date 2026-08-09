@@ -53,7 +53,7 @@ export DB_PATH=~/proyectos/mi-agente/memory.db
 python -m mcp_memory
 ```
 
-> Tip: si apuntas `DB_PATH` a una ruta dentro de un repo sincronizado (Dropbox, iCloud, un volumen compartido), tenés memoria portátil entre máquinas sin montar nada — es un archivo plano.
+> Tip: si apuntas `DB_PATH` a una ruta dentro de un repo sincronizado (Dropbox, iCloud, un volumen compartido), tienes memoria portátil entre máquinas sin montar nada — es un archivo plano.
 
 ---
 
@@ -98,7 +98,7 @@ curl http://localhost:8765/health
 # {"status":"ok","db":false}  -> 503 si no responde
 ```
 
-Útil para healthchecks de systemd/launchd/orquestadores si corrés el server como servicio de fondo.
+Útil para healthchecks de systemd/launchd/orquestadores si corres el server como servicio de fondo.
 
 ---
 
@@ -132,7 +132,7 @@ cp /ruta/compartida/memory.db ~/.agent-memory/memory.db
 mcp-memory check   # confirma que el archivo es legible y cuenta las memorias
 ```
 
-También podés usar `memory_export`/`memory_import` (JSONL) si querés fusionar memoria de dos instancias en vez de reemplazar.
+También puedes usar `memory_export`/`memory_import` (JSONL) si quieres fusionar memoria de dos instancias en vez de reemplazar.
 
 ---
 
