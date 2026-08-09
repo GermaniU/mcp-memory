@@ -321,7 +321,7 @@ def _build_match_expr(query: str) -> str | None:
     tokens = query.split()
     if not tokens:
         return None
-    escaped = [f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens]
+    escaped = ['"' + token.replace('"', '""') + '"' for token in tokens]
     return " OR ".join(escaped)
 
 
