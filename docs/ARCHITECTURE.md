@@ -90,7 +90,7 @@ Memory {
 
 - **Búsqueda semántica.** BM25/FTS5 es léxico — matchea términos, no significado. Si el caso de uso real lo exige (paráfrasis sin overlap de vocabulario), se evaluará un backend de embeddings de vuelta, pero como opción configurable, no como default (ver ADR `mcp-memory-sqlite-fts5-backend`).
 - **Multi-usuario / multi-tenant**: el repo asume "una persona, una máquina". Aislamiento entre proyectos = namespaces.
-- **Auth/ACL**: escucha en `127.0.0.1` por defecto. Podés sobreescribir con la variable `MCP_HOST` si necesitás exponerlo en red, pero en ese caso sos responsable de poner un proxy con auth delante.
+- **Auth/ACL**: escucha en `127.0.0.1` por defecto. Puedes sobreescribir con la variable `MCP_HOST` si necesitas exponerlo en red, pero en ese caso eres responsable de poner un proxy con auth delante.
 - **Soporte multimodal** (imágenes, PDF como blobs).
 - **Sync entre máquinas**. El archivo SQLite es autocontenido — copiarlo (o `sqlite3 .backup`) es suficiente para 99% de casos.
 
