@@ -1,37 +1,30 @@
-"""Integration tests against REAL Qdrant + Ollama (localhost).
+"""Integration tests contra un SqliteFtsStore REAL — sin ningún servicio externo.
 
-These exercise the full stack in-memory via FastMCP's ``Client(app)`` transport:
-real QdrantStore + real OllamaEmbeddings, no HTTP server, no mocks. They run on an
-ephemeral collection (``mcp_memory_itest``) that is created and dropped per session.
+Antes requerían Qdrant + Ollama vivos (marker `integration`, auto-skip si no
+respondían). Con el backend SQLite + FTS5 (TKT-1470, ADR
+mcp-memory-sqlite-fts5-backend) el path E2E real corre siempre: real
+SqliteFtsStore + FastMCP `Client(app)` transporte in-memory, sin mocks, sin
+marker. Cubre AC1-AC4, AC8-AC11, AC15-AC18.
 
-Run:  pytest tests/integration -m integration
-Auto-skips cleanly if Qdrant or Ollama are unreachable.
+Run:  pytest tests/integration
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
+import sqlite3
 import uuid
+from datetime import UTC, datetime
 
-import httpx
+import anyio
 import pytest
 from fastmcp import Client
-from qdrant_client import AsyncQdrantClient
-from qdrant_client.http import models as qm
 
 from mcp_memory.server import build_app
 from mcp_memory.shared.config import Settings
-from mcp_memory.shared.embeddings import OllamaEmbeddings
-from mcp_memory.shared.store import QdrantStore
+from mcp_memory.shared.store import SqliteFtsStore
+from mcp_memory.shared.types import Memory
 
-pytestmark = pytest.mark.integration
-
-QDRANT_URL = "http://localhost:6333"
-OLLAMA_URL = "http://localhost:11434"
-MODEL = "bge-m3"
-DIM = 1024
-ITEST_COLLECTION = "mcp_memory_itest"
 NS = "itest"
 
 
@@ -43,109 +36,130 @@ def _data(result):
     return json.loads(result.content[0].text)
 
 
-async def _services_up() -> str | None:
-    """Return None if both services answer, else a skip reason."""
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as c:
-            r = await c.get(f"{QDRANT_URL}/readyz")
-            if r.status_code >= 500:
-                return f"Qdrant not ready ({r.status_code})"
-    except Exception as exc:  # any connectivity error -> skip
-        return f"Qdrant unreachable: {exc}"
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
-            r = await c.post(
-                f"{OLLAMA_URL}/api/embed", json={"model": MODEL, "input": "ping"}
-            )
-            r.raise_for_status()
-            embs = r.json().get("embeddings") or []
-            if not embs or len(embs[0]) != DIM:
-                return f"Ollama model {MODEL} not serving {DIM}-dim embeddings"
-    except Exception as exc:  # any connectivity error -> skip
-        return f"Ollama unreachable: {exc}"
-    return None
-
-
 @pytest.fixture
 async def app():
-    """Build the FastMCP app on a fresh ephemeral collection; drop it on teardown."""
-    reason = await _services_up()
-    if reason:
-        pytest.skip(reason)
-
-    settings = Settings(
-        embedding_model=MODEL,
-        embedding_dim=DIM,
-        ollama_url=OLLAMA_URL,
-        qdrant_url=QDRANT_URL,
-        qdrant_collection=ITEST_COLLECTION,
-        default_namespace=NS,
-    )
-    # Start from a clean slate even if a prior run left the collection behind.
-    admin = AsyncQdrantClient(url=QDRANT_URL)
-    with contextlib.suppress(Exception):
-        await admin.delete_collection(ITEST_COLLECTION)
-
-    store = QdrantStore(
-        url=settings.qdrant_url,
-        collection=settings.qdrant_collection,
-        dim=settings.embedding_dim,
-    )
-    embeddings = OllamaEmbeddings(
-        base_url=settings.ollama_url,
-        model=settings.embedding_model,
-        api_key=settings.ollama_api_key,
-        expected_dim=settings.embedding_dim,
-    )
-    await store.ensure_collection()
-    application = build_app(settings=settings, embeddings=embeddings, store=store)
+    """Build the FastMCP app on una SqliteFtsStore ':memory:' fresca por test."""
+    settings = Settings(db_path=":memory:", default_namespace=NS)
+    store = SqliteFtsStore(db_path=settings.db_path)
+    await store.ensure_schema()
+    application = build_app(settings=settings, store=store)
     try:
         yield application
     finally:
-        await embeddings.aclose()
         await store.aclose()
-        try:
-            await admin.delete_collection(ITEST_COLLECTION)
-        finally:
-            await admin.close()
 
 
-async def test_save_then_semantic_search_cross_keyword(app):
+async def test_ensure_schema_is_idempotent():
+    """AC1: correr ensure_schema() dos veces seguidas no falla ni duplica nada."""
+    store = SqliteFtsStore(db_path=":memory:")
+    await store.ensure_schema()
+    await store.ensure_schema()  # segunda pasada — CREATE ... IF NOT EXISTS en todo
+    try:
+        stats = await store.stats(namespace=None)
+        assert stats["count"] == 0
+    finally:
+        await store.aclose()
+
+
+async def test_save_then_search_literal_match(app):
+    """AC2/AC8: round-trip save→search por palabra literal; único match -> score 1.0."""
     async with Client(app) as c:
         saved = _data(await c.call_tool("memory_save", {
-            "content": "Germani prefiere copy en espanol MX neutro con tu, sin argentinismos",
+            "content": "Germani prefiere copy en espanol MX neutro, ver TKT-1470",
             "namespace": NS, "tags": ["estilo", "copy"],
         }))
         assert saved["id"]
         assert saved["namespace"] == NS
 
-        # Query shares no exact keywords with the stored content -> tests real embeddings.
         hits = _data(await c.call_tool("memory_search", {
-            "query": "que tono de redaccion usar para textos de clientes mexicanos?",
-            "namespace": NS, "limit": 5,
+            "query": "TKT-1470", "namespace": NS, "limit": 5,
         }))
-        assert len(hits) >= 1
+        assert len(hits) == 1
         assert hits[0]["id"] == saved["id"]
-        assert hits[0]["score"] is not None and hits[0]["score"] > 0
+        assert hits[0]["score"] == 1.0
 
 
-async def test_update_reembeds(app):
+async def test_search_empty_query_returns_empty(app):
+    """AC9: query vacía o solo whitespace no toca la DB, devuelve []."""
+    async with Client(app) as c:
+        await c.call_tool("memory_save", {"content": "algo", "namespace": NS})
+
+        hits_empty = _data(await c.call_tool("memory_search", {"query": "", "namespace": NS}))
+        hits_blank = _data(await c.call_tool("memory_search", {"query": "   ", "namespace": NS}))
+        assert hits_empty == []
+        assert hits_blank == []
+
+
+async def test_search_syntax_noise_does_not_raise(app):
+    """AC10: tokens AND/OR/NOT quedan neutralizados por el quoting defensivo."""
     async with Client(app) as c:
         saved = _data(await c.call_tool("memory_save", {
-            "content": "El deploy de prod corre en un VPS Contabo con Docker",
-            "namespace": NS,
+            "content": "una nota de prueba real", "namespace": NS,
+        }))
+        hits = _data(await c.call_tool("memory_search", {
+            "query": 'AND OR "prueba"', "namespace": NS, "limit": 5,
+        }))
+        assert any(h["id"] == saved["id"] for h in hits)
+
+
+async def test_search_ranks_more_matched_terms_first(app):
+    """AC11: la fila con más términos de la query matcheados rankea primero."""
+    async with Client(app) as c:
+        one_term = _data(await c.call_tool("memory_save", {
+            "content": "el gato duerme en el sofa", "namespace": NS,
+        }))
+        two_terms = _data(await c.call_tool("memory_save", {
+            "content": "el gato come pescado fresco", "namespace": NS,
+        }))
+
+        hits = _data(await c.call_tool("memory_search", {
+            "query": "gato pescado", "namespace": NS, "limit": 5,
+        }))
+        assert hits[0]["id"] == two_terms["id"]
+        assert hits[0]["score"] >= hits[-1]["score"]
+        if len(hits) > 1:
+            assert one_term["id"] in {h["id"] for h in hits}
+
+
+async def test_update_resyncs_fts_index(app):
+    """AC4: search por contenido viejo deja de matchear; por contenido nuevo sí."""
+    async with Client(app) as c:
+        saved = _data(await c.call_tool("memory_save", {
+            "content": "el deploy corre en un VPS Contabo", "namespace": NS,
         }))
         upd = _data(await c.call_tool("memory_update", {
             "id": saved["id"],
-            "content": "Las ordenes dine-in entran al tablero de cocina al confirmarse",
+            "content": "las ordenes dine-in entran al tablero de cocina",
         }))
         assert "cocina" in upd["content"]
 
-        hits = _data(await c.call_tool("memory_search", {
-            "query": "flujo de pedidos del restaurante hacia la cocina",
-            "namespace": NS, "limit": 3,
+        old_hits = _data(await c.call_tool("memory_search", {
+            "query": "Contabo", "namespace": NS,
         }))
-        assert hits and hits[0]["id"] == saved["id"]
+        assert old_hits == []
+
+        new_hits = _data(await c.call_tool("memory_search", {
+            "query": "cocina", "namespace": NS,
+        }))
+        assert new_hits and new_hits[0]["id"] == saved["id"]
+
+
+async def test_delete_removes_from_fts_index(app):
+    """AC3: tras delete, buscar una palabra que solo estaba en esa fila da 0 hits."""
+    async with Client(app) as c:
+        saved = _data(await c.call_tool("memory_save", {
+            "content": "palabraunicaparaeltest borrame", "namespace": NS,
+        }))
+        d = _data(await c.call_tool("memory_delete", {"id": saved["id"]}))
+        assert d["deleted"] is True
+
+        hits = _data(await c.call_tool("memory_search", {
+            "query": "palabraunicaparaeltest", "namespace": NS,
+        }))
+        assert hits == []
+
+        d2 = _data(await c.call_tool("memory_delete", {"id": saved["id"]}))
+        assert d2["deleted"] is False
 
 
 async def test_recent_is_ordered(app):
@@ -165,9 +179,7 @@ async def test_recent_is_ordered(app):
 async def test_stats(app):
     async with Client(app) as c:
         for i in range(2):
-            await c.call_tool("memory_save", {
-                "content": f"dato de stats {i}", "namespace": NS,
-            })
+            await c.call_tool("memory_save", {"content": f"dato de stats {i}", "namespace": NS})
         await c.call_tool("memory_save", {
             "content": "dato en otro namespace", "namespace": "itest-other",
         })
@@ -183,72 +195,27 @@ async def test_stats(app):
         assert set(st_all["namespaces"]) == {NS, "itest-other"}
 
 
-async def test_delete(app):
-    async with Client(app) as c:
-        saved = _data(await c.call_tool("memory_save", {
-            "content": "memoria a borrar", "namespace": NS,
-        }))
-        d = _data(await c.call_tool("memory_delete", {"id": saved["id"]}))
-        assert d["deleted"] is True
-
-        d2 = _data(await c.call_tool("memory_delete", {"id": saved["id"]}))
-        assert d2["deleted"] is False
-
-
-async def test_stats_no_phantom_namespace_after_delete(app):
-    """Namespace fantasma: tras borrar todos sus points no debe aparecer en memory_stats."""
-    async with Client(app) as c:
-        # (a) Guardamos una memoria en el namespace a fantasmear.
-        ghost = _data(await c.call_tool("memory_save", {
-            "content": "memoria fantasma que sera borrada",
-            "namespace": "ghost-ns",
-        }))
-        # (b) Guardamos otra en un segundo namespace para que count global > 0
-        #     y stats no haga early-return antes de llegar al facet.
-        _data(await c.call_tool("memory_save", {
-            "content": "memoria permanente en namespace real",
-            "namespace": "real-ns",
-        }))
-        # (c) Borramos el único point de ghost-ns.
-        deleted = _data(await c.call_tool("memory_delete", {"id": ghost["id"]}))
-        assert deleted["deleted"] is True
-
-        # (d) stats global no debe listar ghost-ns; real-ns sí debe aparecer.
-        st = _data(await c.call_tool("memory_stats", {}))
-        assert "ghost-ns" not in st["namespaces"]
-        assert "real-ns" in st["namespaces"]
-
-
 async def test_export_import_round_trip(app):
-    """Exportar desde un namespace, borrar origen, importar con override a otro namespace.
-
-    Este test simula el flujo real de migración: export → delete src → import to dst.
-    La colisión de IDs solo aplica si el punto sigue existiendo; tras el delete puede importarse.
-    El round-trip finaliza verificando que memory_search semántico encuentra el contenido en dst.
-    """
+    """Simula el flujo de migración: export → delete src → import a otro namespace."""
     src_ns = "itest-export-src"
     dst_ns = "itest-export-dst"
     async with Client(app) as c:
-        # 1. Guardamos 3 memorias en el namespace origen.
         saved_ids = []
         for content in [
             "El deploy de prod corre en un VPS Contabo",
-            "Qdrant almacena vectores de embeddings bge-m3",
+            "SQLite FTS5 indexa contenido lexico via BM25",
             "Hermes orquesta agentes especializados en tareas concretas",
         ]:
             r = _data(await c.call_tool("memory_save", {"content": content, "namespace": src_ns}))
             saved_ids.append(r["id"])
 
-        # 2. Exportamos el namespace origen.
         export_result = _data(await c.call_tool("memory_export", {"namespace": src_ns}))
         assert export_result["count"] == 3
         assert export_result["jsonl"]
 
-        # 3. Borramos las memorias de origen para liberar los IDs.
         for mid in saved_ids:
             await c.call_tool("memory_delete", {"id": mid})
 
-        # 4. Importamos con override al namespace destino — IDs ya no existen, sin colisión.
         import_result = _data(await c.call_tool("memory_import", {
             "jsonl": export_result["jsonl"],
             "namespace_override": dst_ns,
@@ -257,7 +224,7 @@ async def test_export_import_round_trip(app):
         assert import_result["skipped"] == 0
         assert import_result["errors"] == []
 
-        # 5. Segunda importación con los mismos IDs: ahora existen en dst → todo skipped.
+        # Segunda importación con los mismos IDs: ya existen en dst -> todo skipped.
         import_again = _data(await c.call_tool("memory_import", {
             "jsonl": export_result["jsonl"],
             "namespace_override": dst_ns,
@@ -265,36 +232,88 @@ async def test_export_import_round_trip(app):
         assert import_again["imported"] == 0
         assert import_again["skipped"] == 3
 
-        # 6. Búsqueda semántica en el namespace destino encuentra el contenido re-embedado.
         hits = _data(await c.call_tool("memory_search", {
-            "query": "infraestructura de servidor y contenedores en produccion",
-            "namespace": dst_ns,
-            "limit": 5,
+            "query": "VPS Contabo", "namespace": dst_ns, "limit": 5,
         }))
         assert len(hits) >= 1
-        hit_contents = [h["content"] for h in hits]
-        assert any("VPS" in ct or "Qdrant" in ct or "Hermes" in ct for ct in hit_contents)
 
 
-async def test_dim_mismatch_raises():
-    """A collection created with a different vector size must fail ensure_collection."""
-    reason = await _services_up()
-    if reason:
-        pytest.skip(reason)
-
-    collection = f"mcp_memory_itest_dim_{uuid.uuid4().hex[:8]}"
-    admin = AsyncQdrantClient(url=QDRANT_URL)
+async def test_ac15_memory_sentinel_persists_within_session():
+    """AC15: la conexión se abre una vez y se reutiliza — save→search en la
+    misma sesión de ':memory:' funciona (si se reabriera, ':memory:' pierde
+    todo su contenido)."""
+    store = SqliteFtsStore(db_path=":memory:")
+    await store.ensure_schema()
     try:
-        await admin.create_collection(
-            collection_name=collection,
-            vectors_config=qm.VectorParams(size=512, distance=qm.Distance.COSINE),
+        mem = Memory(
+            id=str(uuid.uuid4()),
+            content="contenido que debe persistir entre llamadas",
+            namespace=NS,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
-        store = QdrantStore(url=QDRANT_URL, collection=collection, dim=DIM)
-        with pytest.raises(RuntimeError, match="vector size 512"):
-            await store.ensure_collection()
-        await store.aclose()
+        await store.save(mem)
+        hits = await store.search("persistir", namespace=NS, limit=5)
+        assert len(hits) == 1
+        assert hits[0].id == mem.id
     finally:
+        await store.aclose()
+
+
+async def test_ac16_concurrent_saves_do_not_lock(app):
+    """AC16: N operaciones concurrentes (anyio.gather) completan sin
+    'database is locked' — sin manejo de error especial en el código de la app."""
+    async with Client(app) as c:
+        async def _save(i: int) -> None:
+            await c.call_tool("memory_save", {
+                "content": f"memoria concurrente {i}", "namespace": NS,
+            })
+
+        async with anyio.create_task_group() as tg:
+            for i in range(15):
+                tg.start_soon(_save, i)
+
+        st = _data(await c.call_tool("memory_stats", {"namespace": NS}))
+        assert st["count"] == 15
+
+
+async def test_ac17_wal_mode_on_real_file(tmp_path):
+    """AC17: PRAGMA journal_mode devuelve 'wal' tras _connect() sobre un
+    archivo real (":memory:" ignora WAL — no aplica ahí)."""
+    db_path = tmp_path / "wal-test.db"
+    store = SqliteFtsStore(db_path=str(db_path))
+    await store.ensure_schema()
+    try:
+        conn = await store._connect()
+        cursor = await conn.execute("PRAGMA journal_mode")
+        row = await cursor.fetchone()
+        await cursor.close()
+        assert row[0].lower() == "wal"
+    finally:
+        await store.aclose()
+
+
+async def test_ac18_external_reader_does_not_fail_under_wal(tmp_path):
+    """AC18: una segunda conexión externa (sqlite3 crudo) puede leer mientras
+    el store mantiene la conexión abierta — WAL permite el lector concurrente."""
+    db_path = tmp_path / "wal-external.db"
+    store = SqliteFtsStore(db_path=str(db_path))
+    await store.ensure_schema()
+    try:
+        mem = Memory(
+            id=str(uuid.uuid4()),
+            content="visible para un lector externo",
+            namespace=NS,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        await store.save(mem)
+
+        external = sqlite3.connect(str(db_path))
         try:
-            await admin.delete_collection(collection)
+            cursor = external.execute("SELECT COUNT(*) FROM memories")
+            assert cursor.fetchone()[0] == 1
         finally:
-            await admin.close()
+            external.close()
+    finally:
+        await store.aclose()

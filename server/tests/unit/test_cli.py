@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+import sqlite3
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -8,97 +9,66 @@ from mcp_memory.cli import main, run_diagnostics
 
 
 @pytest.mark.asyncio
-async def test_run_diagnostics_success(respx_mock):
-    from mcp_memory.shared.config import get_settings
-    settings = get_settings()
-    base_url = settings.ollama_url.rstrip('/')
+async def test_run_diagnostics_success_memory_sentinel(monkeypatch):
+    """DB_PATH=":memory:" — FTS5 real (confirmado en este entorno, ADR AC19) y
+    nada que chequear en disco."""
+    monkeypatch.setenv("DB_PATH", ":memory:")
 
-    # Mock Ollama HTTP endpoints
-    respx_mock.get(f"{base_url}/api/tags").respond(
-        json={"models": [{"name": "bge-m3:latest"}]}
-    )
-    respx_mock.post(f"{base_url}/api/embed").respond(
-        json={"embeddings": [[0.1] * 1024]}
-    )
+    success = await run_diagnostics()
 
-    # Mock Qdrant
-    with patch("mcp_memory.cli.AsyncQdrantClient") as mock_qdrant_cls:
-        mock_client = AsyncMock()
-        mock_qdrant_cls.return_value = mock_client
-        mock_client.get_collections.return_value = MagicMock(collections=[])
-
-        success = await run_diagnostics()
-        assert success is True
+    assert success is True
 
 
 @pytest.mark.asyncio
-async def test_run_diagnostics_ollama_failure(respx_mock):
-    from mcp_memory.shared.config import get_settings
-    settings = get_settings()
-    base_url = settings.ollama_url.rstrip('/')
+async def test_run_diagnostics_success_fresh_db_path(tmp_path, monkeypatch):
+    """`check` crea el directorio padre pero NO el archivo .db — eso lo hace
+    ensure_schema() en el arranque real del server, no el diagnóstico."""
+    db_path = tmp_path / "nested" / "memory.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
 
-    respx_mock.get(f"{base_url}/api/tags").respond(status_code=500)
-    respx_mock.post(f"{base_url}/api/embed").respond(status_code=500)
+    success = await run_diagnostics()
 
-    with patch("mcp_memory.cli.AsyncQdrantClient") as mock_qdrant_cls:
-        mock_client = AsyncMock()
-        mock_qdrant_cls.return_value = mock_client
-        mock_client.get_collections.return_value = MagicMock(collections=[])
-
-        success = await run_diagnostics()
-        assert success is False
+    assert success is True
+    assert db_path.parent.exists()
+    assert not db_path.exists()
 
 
 @pytest.mark.asyncio
-async def test_run_diagnostics_tags_failure_embed_ok_still_fails(respx_mock):
-    """Regression test: a broken /api/tags must not be masked by a healthy /api/embed —
-    'check' exists specifically to catch this kind of partial Ollama failure."""
-    from mcp_memory.shared.config import get_settings
-    settings = get_settings()
-    base_url = settings.ollama_url.rstrip('/')
-
-    respx_mock.get(f"{base_url}/api/tags").respond(status_code=500)
-    respx_mock.post(f"{base_url}/api/embed").respond(
-        json={"embeddings": [[0.1] * 1024]}
+async def test_run_diagnostics_reports_existing_row_count(tmp_path, monkeypatch):
+    db_path = tmp_path / "memory.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT, namespace TEXT, "
+        "tags TEXT, metadata TEXT, created_at REAL, updated_at REAL)"
     )
+    conn.execute(
+        "INSERT INTO memories VALUES ('a', 'x', 'ns', '[]', '{}', 0, 0)"
+    )
+    conn.commit()
+    conn.close()
 
-    with patch("mcp_memory.cli.AsyncQdrantClient") as mock_qdrant_cls:
-        mock_client = AsyncMock()
-        mock_qdrant_cls.return_value = mock_client
-        mock_client.get_collections.return_value = MagicMock(collections=[])
+    monkeypatch.setenv("DB_PATH", str(db_path))
 
-        success = await run_diagnostics()
-        assert success is False
+    success = await run_diagnostics()
+
+    assert success is True
 
 
 @pytest.mark.asyncio
-async def test_run_diagnostics_does_not_use_qdrant_client_as_context_manager(respx_mock):
-    """Regression test: AsyncQdrantClient (qdrant-client>=1.18.0, as pinned in
-    pyproject.toml) does not implement __aenter__/__aexit__ — `async with` on it
-    raises regardless of Qdrant's real health. Unlike MagicMock/AsyncMock, a plain
-    Mock() has no auto-generated magic methods, so it reproduces that TypeError if
-    cli.py ever regresses back to using it as a context manager."""
-    from mcp_memory.shared.config import get_settings
-    settings = get_settings()
-    base_url = settings.ollama_url.rstrip('/')
+async def test_run_diagnostics_fts5_missing_fails(monkeypatch):
+    """Regression test: si el sqlite3 del Python del usuario no trae FTS5
+    compilado, `check` debe reportarlo como falla accionable (Decisión 7 del ADR),
+    no crashear ni reportar éxito falso."""
+    monkeypatch.setenv("DB_PATH", ":memory:")
 
-    respx_mock.get(f"{base_url}/api/tags").respond(
-        json={"models": [{"name": "bge-m3:latest"}]}
-    )
-    respx_mock.post(f"{base_url}/api/embed").respond(
-        json={"embeddings": [[0.1] * 1024]}
-    )
+    mock_conn = MagicMock()
+    mock_conn.execute.side_effect = sqlite3.OperationalError("no such module: fts5")
 
-    with patch("mcp_memory.cli.AsyncQdrantClient") as mock_qdrant_cls:
-        mock_client = Mock()
-        mock_client.get_collections = AsyncMock(return_value=MagicMock(collections=[]))
-        mock_client.close = AsyncMock()
-        mock_qdrant_cls.return_value = mock_client
-
+    with patch("mcp_memory.cli.sqlite3.connect", return_value=mock_conn):
         success = await run_diagnostics()
 
-        assert success is True
-        mock_client.close.assert_awaited_once()
+    assert success is False
+    mock_conn.close.assert_called_once()
 
 
 def test_cli_main_check_flag():

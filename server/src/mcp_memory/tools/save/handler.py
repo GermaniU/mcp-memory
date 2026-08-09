@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
-from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
+from mcp_memory.shared.types import Memory, MemoryStore
 
 
 class SaveInput(BaseModel):
@@ -20,7 +20,6 @@ class SaveInput(BaseModel):
 async def save(
     inp: SaveInput,
     *,
-    embeddings: EmbeddingsClient,
     store: MemoryStore,
     default_namespace: str,
 ) -> Memory:
@@ -38,5 +37,4 @@ async def save(
         created_at=now,
         updated_at=now,
     )
-    vector = await embeddings.embed(content)
-    return await store.save(memory, vector)
+    return await store.save(memory)

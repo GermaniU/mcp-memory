@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, ValidationError
 
-from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
+from mcp_memory.shared.types import Memory, MemoryStore
 
 # Límite de tamaño para el payload JSONL de importación.
 # 5 MB es suficiente para exportaciones normales de memoria personal;
@@ -46,7 +46,6 @@ class ImportResult(BaseModel):
 async def import_memories(
     inp: ImportInput,
     *,
-    embeddings: EmbeddingsClient,
     store: MemoryStore,
 ) -> ImportResult:
     payload_bytes = len(inp.jsonl.encode("utf-8"))
@@ -90,8 +89,7 @@ async def import_memories(
             created_at=line_data.created_at,
             updated_at=line_data.updated_at,
         )
-        vector = await embeddings.embed(line_data.content)
-        await store.save(memory, vector)
+        await store.save(memory)
         imported += 1
 
     return ImportResult(imported=imported, skipped=skipped, errors=errors)

@@ -1,15 +1,14 @@
 [project]
 name = "mcp-memory"
-version = "0.3.0"
-description = "Local agent memory exposed via MCP. Ollama embeddings + Qdrant. Drop-in for Claude Code, OpenCode, Cursor, Continue."
+version = "0.4.0"
+description = "Local agent memory exposed via MCP. SQLite + FTS5 (BM25 lexical search), cero infra externa. Drop-in for Claude Code, OpenCode, Cursor, Continue."
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Germani Asesino" }]
 
 dependencies = [
     "fastmcp>=2.5.0",
-    "httpx>=0.27.0",
-    "qdrant-client>=1.18.0",
+    "aiosqlite>=0.20.0",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.14.1",
 ]
@@ -19,7 +18,6 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=7.1.0",
-    "respx>=0.21.0",
     "ruff>=0.15.16",
 ]
 
@@ -38,9 +36,9 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra --strict-markers"
-markers = [
-    "integration: requires running Qdrant + Ollama",
-]
+# El marker "integration" se elimina (TKT-1470): con SQLite + FTS5,
+# tests/integration/test_e2e.py corre sin ningún servicio externo — deja
+# de tener sentido distinguirlo de tests/unit vía marker de skip.
 
 [tool.ruff]
 line-length = 100

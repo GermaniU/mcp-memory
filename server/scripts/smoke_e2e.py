@@ -1,7 +1,7 @@
 """Smoke E2E contra un servidor mcp-memory corriendo (HTTP MCP real).
 
 Ejercita las 7 tools en orden: save -> search -> list -> recent -> update -> stats -> delete.
-Requiere: servidor en http://localhost:8765/mcp + Qdrant + Ollama vivos.
+Requiere: servidor en http://localhost:8765/mcp. Sin Qdrant, sin Ollama — SQLite local.
 
 Uso:
     .venv/bin/python scripts/smoke_e2e.py
@@ -57,16 +57,17 @@ async def main() -> int:
         }))
         check("save devuelve id + namespace", bool(r1.get("id")) and r1.get("namespace") == NS)
 
-        # 2. search semantico — la query NO comparte keywords exactas con el contenido
+        # 2. search lexico (BM25/FTS5) — la query comparte terminos literales con
+        # el contenido/tags guardados (BM25 no hace match semantico cross-vocabulario).
         hits = _data(await c.call_tool("memory_search", {
-            "query": "que estilo de redaccion usar para textos de clientes mexicanos?",
+            "query": "estilo copy español MX",
             "namespace": NS, "limit": 5,
         }))
         check("search >=1 hit", len(hits) >= 1, f"{len(hits)} hits")
         if hits:
             top = hits[0]
             check(
-                "hit mas relevante = memoria de copy (semantica real)",
+                "hit mas relevante = memoria de copy (match lexico)",
                 top["id"] == r1["id"],
                 f"top score={top.get('score'):.3f}",
             )
@@ -79,17 +80,18 @@ async def main() -> int:
         recent = _data(await c.call_tool("memory_recent", {"namespace": NS, "limit": 1}))
         check("recent[0] = ultima escrita", bool(recent) and recent[0]["id"] == r2["id"])
 
-        # 5. update re-embebe: ahora r2 deberia matchear una query de cocina
+        # 5. update re-sincroniza el indice FTS5: ahora r2 deberia matchear una
+        # query que comparte terminos literales con el contenido actualizado.
         upd = _data(await c.call_tool("memory_update", {
             "id": r2["id"],
             "content": "Las ordenes dine-in entran al tablero de cocina al confirmarse",
         }))
         check("update devuelve contenido nuevo", "cocina" in (upd or {}).get("content", ""))
         hits2 = _data(await c.call_tool("memory_search", {
-            "query": "flujo de pedidos del restaurante hacia la cocina",
+            "query": "tablero cocina ordenes confirmarse",
             "namespace": NS, "limit": 1,
         }))
-        check("search post-update encuentra el contenido re-embebido",
+        check("search post-update encuentra el contenido re-indexado",
               bool(hits2) and hits2[0]["id"] == r2["id"])
 
         # 6. stats
@@ -107,7 +109,7 @@ async def main() -> int:
     if failures:
         print(f"SMOKE FAIL - {len(failures)} checks rotos: {failures}")
         return 1
-    print("SMOKE OK - las 7 tools funcionan E2E contra Qdrant + Ollama reales")
+    print("SMOKE OK - las tools funcionan E2E contra SQLite local (sin Qdrant, sin Ollama)")
     return 0
 
 

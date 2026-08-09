@@ -6,11 +6,10 @@ from mcp_memory.tools.export.handler import ExportInput, export_memories
 from mcp_memory.tools.save.handler import SaveInput, save
 
 
-async def test_export_happy_path_returns_all_memories(embeddings, store):
+async def test_export_happy_path_returns_all_memories(store):
     for i in range(3):
         await save(
             SaveInput(content=f"memoria {i}", namespace="ns"),
-            embeddings=embeddings,
             store=store,
             default_namespace="default",
         )
@@ -32,16 +31,14 @@ async def test_export_happy_path_returns_all_memories(embeddings, store):
         assert "vector" not in obj
 
 
-async def test_export_namespace_filter(embeddings, store):
+async def test_export_namespace_filter(store):
     await save(
         SaveInput(content="en ns-a", namespace="ns-a"),
-        embeddings=embeddings,
         store=store,
         default_namespace="default",
     )
     await save(
         SaveInput(content="en ns-b", namespace="ns-b"),
-        embeddings=embeddings,
         store=store,
         default_namespace="default",
     )
@@ -58,13 +55,8 @@ async def test_export_empty_namespace_returns_count_zero(store):
     assert result.jsonl == ""
 
 
-async def test_export_timestamps_are_iso8601(embeddings, store):
-    await save(
-        SaveInput(content="timestamp test"),
-        embeddings=embeddings,
-        store=store,
-        default_namespace="default",
-    )
+async def test_export_timestamps_are_iso8601(store):
+    await save(SaveInput(content="timestamp test"), store=store, default_namespace="default")
     result = await export_memories(ExportInput(), store=store)
     obj = json.loads(result.jsonl)
     # datetime.isoformat() produce strings parseables — validamos que no sean epoch floats.

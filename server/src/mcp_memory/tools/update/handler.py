@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from mcp_memory.shared.types import EmbeddingsClient, Memory, MemoryStore
+from mcp_memory.shared.types import Memory, MemoryStore
 
 
 class UpdateInput(BaseModel):
@@ -15,14 +15,11 @@ class UpdateInput(BaseModel):
 async def update(
     inp: UpdateInput,
     *,
-    embeddings: EmbeddingsClient,
     store: MemoryStore,
 ) -> Memory | None:
-    new_vector = await embeddings.embed(inp.content) if inp.content else None
     return await store.update(
         inp.id,
         content=inp.content,
         tags=inp.tags,
         metadata=inp.metadata,
-        vector=new_vector,
     )
