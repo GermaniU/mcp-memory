@@ -34,7 +34,7 @@ Reemplazo completo del backend (ADR `mcp-memory-sqlite-fts5-backend`, spec-first
 
 ### Migración desde 0.3.0
 - Borra las variables `EMBEDDING_MODEL`/`EMBEDDING_DIM`/`OLLAMA_URL`/`OLLAMA_API_KEY`/`QDRANT_URL`/`QDRANT_COLLECTION` de tu `.env`; opcionalmente define `DB_PATH`.
-- Los datos en Qdrant **no migran automáticamente** — no hay ruta de conversión vector→texto plano hacia SQLite. Si necesitás conservar memoria existente, expórtala con `memory_export` (JSONL) **antes** de actualizar, y reimportala con `memory_import` sobre el nuevo backend una vez arriba.
+- Los datos en Qdrant **no migran automáticamente** — no hay ruta de conversión vector→texto plano hacia SQLite. Si necesitas conservar memoria existente, expórtala con `memory_export` (JSONL) **antes** de actualizar, y reimpórtala con `memory_import` sobre el nuevo backend una vez arriba.
 - Si llamabas `memory_search` con `min_score`, quita ese argumento — la tool ahora lo rechaza como campo desconocido si tu cliente MCP valida el schema estrictamente.
 - Dado de baja `docker-compose.yml`: si dependías de `docker compose up -d`, pasa a `pip install -e . && mcp-memory` (ver [`docs/INSTALL.md`](../docs/INSTALL.md)).
 

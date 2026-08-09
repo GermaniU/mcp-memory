@@ -141,4 +141,4 @@ Una vez conectado, el agente puede llamar las tools como:
 - **Usa namespaces**. Uno por proyecto, agente o "tema". Sin namespace todo cae al pool global y se ensucia.
 - **Guarda el WHY, no el WHAT**. La memoria es para razonamiento, no para snapshots de código.
 - **Borra cuando algo deje de ser cierto**. La memoria no caduca sola; un `memory_delete` periódico mantiene la calidad de la búsqueda.
-- **La búsqueda es léxica (BM25/FTS5), no semántica**: incluí en la query los términos/nombres propios que esperás encontrar en el contenido guardado (identificadores, nombres de error, palabras clave), no solo una paráfrasis del significado.
+- **La búsqueda es léxica (BM25/FTS5), no semántica**: incluye en la query los términos/nombres propios que esperas encontrar en el contenido guardado (identificadores, nombres de error, palabras clave), no solo una paráfrasis del significado.
