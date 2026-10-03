@@ -8,7 +8,7 @@ authors = [{ name = "GermaniU" }]
 
 dependencies = [
     "fastmcp>=2.5.0",
-    "aiosqlite>=0.20.0",
+    "aiosqlite>=0.22.1",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.14.1",
 ]
