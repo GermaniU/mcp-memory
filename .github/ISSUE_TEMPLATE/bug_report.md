@@ -6,6 +6,8 @@ labels: bug
 assignees: ""
 ---
 
+<!-- Security problem? Do NOT open a public issue. See SECURITY.md. -->
+
 ## Version
 
 <!-- Output of: pip show mcp-memory | grep Version  OR  the Docker image tag you're using -->
@@ -13,16 +15,25 @@ assignees: ""
 ## Installation mode
 
 <!-- Check one -->
-- [ ] Docker Compose (default stack from README)
 - [ ] Standalone Python process (`mcp-memory` CLI)
-- [ ] External Qdrant (pointing `QDRANT_URL` to your own instance)
+- [ ] Docker image (`ghcr.io/germaniu/mcp-memory`)
 - [ ] Other (describe below)
 
-## Embedding configuration
+## Environment
+
+- OS:
+- Python version (`python --version`):
+- MCP client (Claude Code, Cursor, OpenCode, Continue, …):
+
+## Configuration
+
+<!-- Any variables you changed from .env.example. Do not paste memory contents you consider private. -->
 
 ```
-EMBEDDING_MODEL=
-EMBEDDING_DIM=
+DB_PATH=
+MCP_HOST=
+MCP_PORT=
+MCP_CORS_ORIGINS=
 ```
 
 ## Steps to reproduce
@@ -39,13 +50,14 @@ EMBEDDING_DIM=
 
 <!-- What actually happened — include the full error message / traceback -->
 
-## Health check output
+## Diagnostics
 
 ```
+mcp-memory check
 curl localhost:8765/health
 ```
 
-<!-- Paste the response here -->
+<!-- Paste both outputs here -->
 
 ## Additional context
 
