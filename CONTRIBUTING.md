@@ -8,7 +8,7 @@
 
 > **Software pequeño, bien hecho, fácil de mantener.**
 
-MCP Memory es deliberadamente reducido. Hace **una cosa** (memoria semántica de texto plano vía MCP) y la hace bien. No vamos a añadir features especulativas. Cada línea de código que entra al repo tiene que justificar su mantenimiento.
+MCP Memory es deliberadamente reducido. Hace **una cosa** (memoria léxica de texto plano vía MCP, con SQLite + FTS5) y la hace bien. No vamos a añadir features especulativas. Cada línea de código que entra al repo tiene que justificar su mantenimiento.
 
 ---
 
@@ -20,8 +20,8 @@ MCP Memory es deliberadamente reducido. Hace **una cosa** (memoria semántica de
 - Sin código muerto. Si está comentado o no se usa, se borra.
 
 ### SOLID (sin sobreingeniería)
-- **SRP**: cada handler hace una cosa. `EmbeddingsClient` solo embebe. `MemoryStore` solo persiste.
-- **DIP**: handlers dependen de `Protocol` (`EmbeddingsClient`, `MemoryStore`), no de `OllamaEmbeddings`/`QdrantStore`. Esto permite tests sin Docker.
+- **SRP**: cada handler hace una cosa. `MemoryStore` solo persiste y busca.
+- **DIP**: los handlers dependen del `Protocol` `MemoryStore` (`shared/types.py`), no de `SqliteFtsStore`. Esto permite tests con un `FakeStore` en memoria. `tests/unit/test_architecture.py` lo hace cumplir.
 - **OCP**: añadir una tool nueva = una carpeta nueva. **No se modifican slices existentes** salvo bug fix.
 - **No** factories, **no** builders, **no** registries dinámicos. Wiring explícito en `server.build_app`.
 
@@ -35,17 +35,17 @@ MCP Memory es deliberadamente reducido. Hace **una cosa** (memoria semántica de
 server/src/mcp_memory/
 ├── server.py                 # composition root: wiring FastMCP + dependencias
 ├── shared/                   # solo lo verdaderamente compartido entre slices
-│   ├── config.py · embeddings.py · store.py · types.py
+│   ├── config.py · store.py · types.py
 └── tools/                    # 1 carpeta = 1 slice MCP
     ├── save/handler.py · search/handler.py · …
 ```
-**Cada slice es independiente.** Si tocas `save/`, no tocas `search/`. Tests de cada slice viven aparte.
+**Cada slice es independiente.** Si tocas `save/`, no tocas `search/`. Tests de cada slice viven aparte. Una tool nunca importa otra tool ni el store concreto: lo verifica `tests/unit/test_architecture.py`.
 
 ### Tests primero (TDD bienvenido)
 - **Lógica con reglas** → escribe el test antes que el handler.
 - **Wiring/glue** (server.py, factories) → tests de integración cubren esto, no hace falta TDD.
 - Cada PR con código nuevo trae sus tests. **No se acepta lógica sin tests.**
-- Los tests usan `FakeStore` y `FakeEmbeddings` (in-memory, deterministas). No requieren Docker ni Ollama.
+- Los tests unitarios usan `FakeStore` (in-memory, determinista). Los de integración usan un `SqliteFtsStore` real sobre `:memory:`. Ninguno necesita servicios externos.
 
 ### Comentarios
 - **Por defecto, no escribas comentarios.** Un nombre bien elegido y una función pequeña ya cuentan el "qué".
@@ -66,7 +66,7 @@ server/src/mcp_memory/
 ```
 feat: añadir tool memory_export
 fix: corregir filtro de namespace en search
-docs: aclarar el setup de Ollama remoto
+docs: aclarar cómo mover DB_PATH a otra máquina
 refactor: extraer payload mapping a helpers
 test: cubrir caso de namespace vacío en list
 chore: actualizar dependencias
@@ -78,7 +78,7 @@ Mensaje en imperativo, primera línea ≤ 72 chars, cuerpo opcional explicando e
 - **1 PR = 1 propósito.** No mezclar feature + refactor + bumps de deps.
 - Título en formato Conventional Commit.
 - Cuerpo del PR responde: **qué cambia, por qué, cómo lo probaste**.
-- CI verde (tests + ruff). Local: `pytest tests/unit -q && ruff check src tests scripts`.
+- CI verde (ruff, tests, pip-audit y build Docker). Local: `ruff check src tests scripts && pytest tests -q`.
 
 ---
 
@@ -90,36 +90,32 @@ cd mcp-memory/server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Ejecutar tests unitarios (16, sin Docker ni Ollama, <1s)
+# Tests unitarios (67, sin servicios externos, ~1s)
 pytest tests/unit -q
+
+# Tests de integración (14, SQLite + FTS5 real sobre :memory:, ~2s)
+pytest tests/integration -q
 
 # Lint + format
 ruff check src tests scripts
 ruff format src tests scripts
 ```
 
-Para tests de integración (necesitan Qdrant en `:6333` + Ollama con `bge-m3` en `:11434`):
-
-```bash
-docker compose up -d            # o apunta a tu propio Qdrant/Ollama
-pytest tests/integration -m integration   # auto-skip si los servicios no responden
-```
-
-> Los tests de integración corren sobre una colección efímera (`mcp_memory_itest`)
-> que se crea y borra por sesión — no tocan tu colección real.
+> Los tests de integración usan una base `:memory:` efímera por test: nunca tocan
+> tu `DB_PATH` real.
 
 ---
 
 ## 🆕 Cómo añadir una tool MCP
 
-Pongamos que quieres añadir `memory_export`. Sigue este flujo y tu PR pasa rápido:
+Pongamos que quieres añadir `memory_tags` (listar los tags usados). Sigue este flujo y tu PR pasa rápido:
 
 ### 1. Crea la slice
 
 ```
-server/src/mcp_memory/tools/export/
+server/src/mcp_memory/tools/tags/
 ├── __init__.py    # vacío
-└── handler.py     # ExportInput + async export(...)
+└── handler.py     # TagsInput + async tags(...)
 ```
 
 `handler.py`:
@@ -130,27 +126,25 @@ from pydantic import BaseModel, Field
 from mcp_memory.shared.types import MemoryStore
 
 
-class ExportInput(BaseModel):
+class TagsInput(BaseModel):
     namespace: str | None = Field(None)
-    format: str = Field("jsonl", pattern="^(jsonl|markdown)$")
 
 
-async def export(inp: ExportInput, *, store: MemoryStore) -> str:
+async def tags(inp: TagsInput, *, store: MemoryStore) -> list[str]:
     items = await store.list_(namespace=inp.namespace, limit=10_000, offset=0)
-    # … serializar al formato elegido
-    return "..."
+    return sorted({tag for item in items for tag in item.tags})
 ```
 
 ### 2. Escribe tests (antes que la implementación si haces TDD)
 
 ```
-server/tests/unit/tools/test_export.py
+server/tests/unit/tools/test_tags.py
 ```
 
-Con `FakeStore` y `FakeEmbeddings` ya disponibles en `conftest.py`. Cubre:
+Con `FakeStore` ya disponible en `conftest.py`. Cubre:
 - Happy path.
 - Filtro por namespace.
-- 1-2 edge cases (vacío, formato inválido).
+- 1-2 edge cases (namespace vacío, memorias sin tags).
 
 ### 3. Cablea en `server.py`
 
@@ -160,22 +154,24 @@ el schema MCP que ven los clientes no quede anidado; el `Input` del handler se
 reconstruye internamente:
 
 ```python
-from mcp_memory.tools.export.handler import ExportInput, export
+from mcp_memory.tools.tags.handler import TagsInput, tags
 
-@mcp.tool(name="memory_export", description="Exportar memorias en JSONL o Markdown.")
-async def _export(namespace: str | None = None, format: str = "jsonl") -> str:
-    inp = ExportInput(namespace=namespace, format=format)
-    return await export(inp, store=store)
+@mcp.tool(name="memory_tags", description="Listar los tags usados en las memorias.")
+async def _tags(namespace: str | None = None) -> list[str]:
+    inp = TagsInput(namespace=namespace)
+    return await tags(inp, store=store)
 ```
 
-> ⚠️ No declares el parámetro como `inp: ExportInput`. Eso anida el schema bajo
+> ⚠️ No declares el parámetro como `inp: TagsInput`. Eso anida el schema bajo
 > `inp` y obliga a los clientes a llamar con `{"inp": {...}}` (regresión del
 > breaking corregido en 0.2.0).
 
 ### 4. Actualiza docs
 
-- README: añade fila a la tabla de tools.
+Regla anti-drift (ver `CLAUDE.md`), en el mismo PR:
+- `README.md` y `README.en.md`: fila en la tabla de tools y el conteo de tools.
 - `docs/CLIENTS.md`: ejemplo de invocación si tiene argumentos no obvios.
+- `CHANGELOG.md`: entrada en `[Unreleased]`.
 
 ### 5. PR
 
@@ -183,11 +179,9 @@ Conventional commit, descripción clara, tests pasando.
 
 ---
 
-## 🧪 Cómo añadir un EmbeddingsClient nuevo (ej: OpenAI, Voyage)
+## 🧪 Cómo añadir otro backend de almacenamiento
 
-Casi igual al flujo de tool, pero el archivo va en `shared/embeddings_<provider>.py` y debe cumplir el `Protocol` `EmbeddingsClient` (`async def embed(text) -> list[float]`).
-
-Cambia el wiring en `server.py` para elegir el provider según `.env`. **No toques `OllamaEmbeddings`** — añade el nuevo en paralelo.
+Solo si hay un caso de uso real (por ejemplo, búsqueda semántica opcional). La implementación nueva debe cumplir el `Protocol` `MemoryStore` de `shared/types.py`, vivir en `shared/` y elegirse en `server.py` según la configuración. **No toques `SqliteFtsStore`**: añade la nueva en paralelo, con sus propios tests.
 
 ---
 
@@ -206,14 +200,14 @@ Si crees que tu caso justifica una excepción, abre un issue **antes** del PR co
 
 ## 🤔 Preguntas frecuentes
 
-**¿Por qué Qdrant y no SQLite + sqlite-vec / ChromaDB / LanceDB?**
-- Qdrant tiene la API filtros/payload-indexes más ergonómica para namespaces, escala muy bien y separa "almacenamiento" de "código". sqlite-vec es excelente pero acopla migration al cliente; lo evaluamos para una versión 0-deps en el futuro.
+**¿Por qué SQLite + FTS5 y no Qdrant / sqlite-vec / ChromaDB?**
+- Cero infra externa: un único archivo local, sin Docker ni modelos que descargar. BM25 cubre bien el caso real (buscar por términos, nombres e identificadores). Hasta la 0.3.0 se usaba Qdrant + Ollama; ver `CHANGELOG.md`.
 
 **¿Por qué Python y no Go/Rust/Node?**
-- SDK MCP más maduro en Python (FastMCP). Stack ligero (~80MB imagen). Ecosistema rico de embedding clients. Si en el futuro queremos un binario único, se reescribirá.
+- SDK MCP maduro en Python (FastMCP) y `sqlite3` con FTS5 en la librería estándar. Si en el futuro queremos un binario único, se reescribirá.
 
 **¿Por qué no hay UI?**
-- KISS. Tu agente es la UI. Para inspección manual está el dashboard de Qdrant en `:6333/dashboard`.
+- KISS. Tu agente es la UI. Para inspección manual, abre el archivo de `DB_PATH` con cualquier cliente SQLite (`sqlite3`, DB Browser for SQLite).
 
 **¿Puedo guardar PDFs / imágenes?**
 - No directamente. Extrae el texto antes (OCR / parser) y guarda el texto. La memoria es **texto plano por diseño**.

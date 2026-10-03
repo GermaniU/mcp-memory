@@ -75,11 +75,14 @@ jobs:
           cache: pip
           cache-dependency-path: server/pyproject.toml
 
-      - name: Instalar dependencias
-        run: pip install . pip-audit
+      - name: Instalar pip-audit
+        run: pip install pip-audit
 
-      - name: pip-audit
-        run: pip-audit --skip-editable
+      # Modo proyecto: audita solo las dependencias declaradas en pyproject.toml
+      # (resueltas en un entorno aislado), no las herramientas preinstaladas del
+      # runner como setuptools.
+      - name: pip-audit (dependencias del proyecto)
+        run: pip-audit .
 
   docker:
     name: Build de la imagen Docker
