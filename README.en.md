@@ -184,7 +184,7 @@ Full details and step-by-step workflow in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q          # 60 unit tests, <1s
+pytest tests/unit -q          # 67 unit tests, ~1s
 pytest tests/integration -q   # real E2E against SQLite/FTS5, no external services
 ruff check src tests scripts
 ```

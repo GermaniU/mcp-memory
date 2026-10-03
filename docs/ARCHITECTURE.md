@@ -25,7 +25,7 @@ server/src/mcp_memory/
 
 Cada slice es **una función pura** que recibe sus dependencias por keyword arguments. Esto significa:
 
-- **Test unitario sin infra externa**: `pytest tests/unit` corre con un `FakeStore` in-memory. 60 tests, <1s.
+- **Test unitario sin infra externa**: `pytest tests/unit` corre con un `FakeStore` in-memory. 67 tests, ~1s.
 - **Añadir una tool nueva**: una carpeta nueva en `tools/`, un decorador `@mcp.tool` en `server.py`. Cero acoplamiento con las existentes (OCP).
 
 ### SOLID, sin sobreingeniería
@@ -90,7 +90,7 @@ Memory {
 
 - **Búsqueda semántica.** BM25/FTS5 es léxico — matchea términos, no significado. Si el caso de uso real lo exige (paráfrasis sin overlap de vocabulario), se evaluará un backend de embeddings de vuelta, pero como opción configurable, no como default.
 - **Multi-usuario / multi-tenant**: el repo asume "una persona, una máquina". Aislamiento entre proyectos = namespaces.
-- **Auth/ACL**: escucha en `127.0.0.1` por defecto. Puedes sobreescribir con la variable `MCP_HOST` si necesitas exponerlo en red, pero en ese caso eres responsable de poner un proxy con auth delante.
+- **Auth/ACL**: escucha en `127.0.0.1` por defecto. Puedes sobreescribir con la variable `MCP_HOST` si necesitas exponerlo en red, pero en ese caso eres responsable de poner un proxy con auth delante. Además, el CORS está cerrado por defecto (`MCP_CORS_ORIGINS` vacío), para que ninguna página web abierta en el navegador pueda leer o borrar memorias vía `fetch` a localhost. Ver [`SECURITY.md`](../SECURITY.md).
 - **Soporte multimodal** (imágenes, PDF como blobs).
 - **Sync entre máquinas**. El archivo SQLite es autocontenido — copiarlo (o `sqlite3 .backup`) es suficiente para 99% de casos.
 
