@@ -74,7 +74,44 @@ async def test_run_diagnostics_fts5_missing_fails(monkeypatch):
 def test_cli_main_check_flag():
     with patch("sys.argv", ["mcp-memory", "check"]), \
          patch("mcp_memory.cli.run_diagnostics", new_callable=AsyncMock) as mock_diag, \
+         patch("mcp_memory.cli.server_main") as mock_server, \
          patch("sys.exit") as mock_exit:
         mock_diag.return_value = True
         main()
         mock_exit.assert_called_once_with(0)
+        mock_server.assert_not_called()
+
+
+@pytest.mark.parametrize("flag", ["--check", "-c"])
+def test_cli_main_legacy_check_flags(flag):
+    with patch("mcp_memory.cli.run_diagnostics", new_callable=AsyncMock) as mock_diag, \
+         patch("mcp_memory.cli.server_main") as mock_server, \
+         pytest.raises(SystemExit) as exc:
+        mock_diag.return_value = False
+        main([flag])
+    assert exc.value.code == 1
+    mock_server.assert_not_called()
+
+
+def test_cli_main_without_args_starts_server():
+    with patch("mcp_memory.cli.server_main") as mock_server:
+        main([])
+    mock_server.assert_called_once_with()
+
+
+def test_cli_version_prints_version_without_starting_server(capsys):
+    from mcp_memory import __version__
+
+    with patch("mcp_memory.cli.server_main") as mock_server, pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert __version__ in capsys.readouterr().out
+    mock_server.assert_not_called()
+
+
+@pytest.mark.parametrize("argv", [["--help"], ["--bogus"]])
+def test_cli_help_or_unknown_args_never_start_server(argv):
+    """Regresión: antes `mcp-memory --help` (o un typo) arrancaba el server."""
+    with patch("mcp_memory.cli.server_main") as mock_server, pytest.raises(SystemExit):
+        main(argv)
+    mock_server.assert_not_called()
