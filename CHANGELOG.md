@@ -22,6 +22,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - La descripción de `memory_export` mencionaba "no vectors", resto del backend de embeddings retirado en 0.4.0.
 
 ### Changed
+- Dependencias: pisos mínimos subidos a `pydantic>=2.13.5`, `pydantic-settings>=2.15.0`, `aiosqlite>=0.22.1` y, en dev, `pytest-asyncio>=1.4.0` y `ruff>=0.16.9`. `uv.lock` regenerado (seguía declarando `mcp-memory` 0.4.0). Release: `docker/setup-buildx-action@v4` y `docker/metadata-action@v6` (runtime Node 24, sin cambios en los inputs usados).
 - Plantilla de bug report actualizada al backend actual (sin Qdrant/embeddings; pide `mcp-memory check`, health y `MCP_CORS_ORIGINS`) y enlace al reporte privado de vulnerabilidades.
 - Imagen de portada (`docs/assets/og-image.png`/`.svg`) rediseñada: icono de base de datos con búsqueda BM25, texto acorde al backend actual (SQLite + FTS5) y mismo estilo que tor-mcp-proxy.
 
