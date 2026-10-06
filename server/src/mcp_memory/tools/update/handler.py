@@ -17,9 +17,17 @@ async def update(
     *,
     store: MemoryStore,
 ) -> Memory | None:
+    # Mismo criterio que memory_save: una memoria vacía no es buscable por FTS5
+    # y solo ensucia list/recent.
+    content = inp.content
+    if content is not None:
+        content = content.strip()
+        if not content:
+            raise ValueError("content must not be empty")
+
     return await store.update(
         inp.id,
-        content=inp.content,
+        content=content,
         tags=inp.tags,
         metadata=inp.metadata,
     )
