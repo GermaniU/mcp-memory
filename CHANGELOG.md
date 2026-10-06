@@ -21,9 +21,14 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - `memory_update` aceptaba `content` vacío o solo espacios (dejando una memoria imposible de encontrar por FTS5), mientras que `memory_save` lo rechazaba. Ahora aplica el mismo criterio: recorta espacios y rechaza contenido vacío sin modificar la memoria.
 - La descripción de `memory_export` mencionaba "no vectors", resto del backend de embeddings retirado en 0.4.0.
 
+### Removed
+- Restos del backend anterior (vectorial + embeddings) en docs, tests, `.gitignore` y el smoke script. El CHANGELOG de 0.1.0–0.4.0 se resume en «Historia previa», porque ese código nunca formó parte de este repositorio.
+
 ### Changed
+- `CLAUDE.md`: regla para no publicar enlaces de sesión, atribución ni datos del entorno en commits y PRs.
+- Enlaces del final del CHANGELOG: apuntaban a tags (`v0.1.0`…`v0.4.0`) que no existen en el repo.
 - Dependencias: pisos mínimos subidos a `pydantic>=2.13.5`, `pydantic-settings>=2.15.0`, `aiosqlite>=0.22.1` y, en dev, `pytest-asyncio>=1.4.0` y `ruff>=0.16.9`. `uv.lock` regenerado (seguía declarando `mcp-memory` 0.4.0). Release: `docker/setup-buildx-action@v4` y `docker/metadata-action@v6` (runtime Node 24, sin cambios en los inputs usados).
-- Plantilla de bug report actualizada al backend actual (sin Qdrant/embeddings; pide `mcp-memory check`, health y `MCP_CORS_ORIGINS`) y enlace al reporte privado de vulnerabilidades.
+- Plantilla de bug report actualizada al backend actual (pide `mcp-memory check`, health y `MCP_CORS_ORIGINS`) y enlace al reporte privado de vulnerabilidades.
 - Imagen de portada (`docs/assets/og-image.png`/`.svg`) rediseñada: icono de base de datos con búsqueda BM25, texto acorde al backend actual (SQLite + FTS5) y mismo estilo que tor-mcp-proxy.
 
 ---
@@ -51,173 +56,14 @@ Primera versión del repositorio con historial limpio.
 
 ---
 
-## [0.4.0] — 2026-08-07
+## Historia previa (antes del repositorio público)
 
-### ⚠️ Breaking — Backend de almacenamiento: Qdrant + Ollama → SQLite + FTS5
+El historial de git de este repo empieza en 0.5.0. Las versiones anteriores (0.1.0–0.4.0, 2026-05 a 2026-08, y una primera implementación en Node.js) no están publicadas; en resumen:
 
-Reemplazo completo del backend (spec-first). Motivación: cero infra externa — ya no hace falta Docker, Qdrant ni Ollama para correr el server; un único archivo SQLite local.
-
-- **Storage**: `QdrantStore` (vectores, coseno) → `SqliteFtsStore` (`aiosqlite` + tabla virtual FTS5 external-content sincronizada por triggers, ranking BM25). Ver [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
-- **`memory_search` cambia de contrato**:
-  - `min_score` **eliminado** — BM25 no tiene un umbral de similitud coseno equivalente; filtrar por relevancia ahora es responsabilidad del cliente sobre el `score` normalizado devuelto.
-  - `limit` default `10` → `20`.
-  - `score` en `Memory` sigue existiendo pero ahora es la normalización min-max `[0,1]` del `bm25()` crudo **dentro del result set de esa llamada** — no comparable entre llamadas ni namespaces distintos (antes era similitud coseno, sí comparable en ese sentido).
-  - La búsqueda pasó de **semántica** (embeddings + coseno) a **léxica** (BM25/FTS5): matchea términos, no significado.
-- **`memory_import`** ya no re-embebe cada entrada (no hay embeddings) — sigue saltando colisiones de `id` silenciosamente, sin cambios en esa parte del contrato.
-- **Variables de entorno eliminadas**: `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `OLLAMA_URL`, `OLLAMA_API_KEY`, `QDRANT_URL`, `QDRANT_COLLECTION`.
-- **Variable nueva**: `DB_PATH` (default `~/.agent-memory/memory.db`; acepta `:memory:` para instancias efímeras).
-- **`docker-compose.yml` eliminado.** Instalación ahora es `pip install -e .` / `uvx` — ver [`docs/INSTALL.md`](../docs/INSTALL.md).
-- **`GET /health`** cambia su payload: `{"status":"ok","qdrant":true|false}` → `{"status":"ok","db":true|false}`.
-- **`mcp-memory check`** reescrito: en vez de validar alcance de Qdrant/Ollama, valida soporte de FTS5 en el `sqlite3` de tu Python y accesibilidad de `DB_PATH`.
-- **Marker de pytest `integration` eliminado**: `tests/integration/` corre contra un `SqliteFtsStore` real (archivo temporal) sin ningún servicio externo — dejó de tener sentido el auto-skip. `pytest tests/integration -m integration` → `pytest tests/integration`.
-
-### Migración desde 0.3.0
-- Borra las variables `EMBEDDING_MODEL`/`EMBEDDING_DIM`/`OLLAMA_URL`/`OLLAMA_API_KEY`/`QDRANT_URL`/`QDRANT_COLLECTION` de tu `.env`; opcionalmente define `DB_PATH`.
-- Los datos en Qdrant **no migran automáticamente** — no hay ruta de conversión vector→texto plano hacia SQLite. Si necesitas conservar memoria existente, expórtala con `memory_export` (JSONL) **antes** de actualizar, y reimpórtala con `memory_import` sobre el nuevo backend una vez arriba.
-- Si llamabas `memory_search` con `min_score`, quita ese argumento — la tool ahora lo rechaza como campo desconocido si tu cliente MCP valida el schema estrictamente.
-- Dado de baja `docker-compose.yml`: si dependías de `docker compose up -d`, pasa a `pip install -e . && mcp-memory` (ver [`docs/INSTALL.md`](../docs/INSTALL.md)).
-
-### Fixed
-- `__version__` en `server/src/mcp_memory/__init__.py` quedó desincronizado en `0.1.0` mientras `pyproject.toml` ya estaba en `0.3.0`. Sincronizado (y ambos avanzan juntos a `0.4.0` en este release).
-- `embedding_dim` en `Settings` no tenía ningún validador: un `EMBEDDING_DIM=0` o negativo en `.env` pasaba el type-check de pydantic (son ints válidos) pero producía una colección Qdrant con `vector_size` inválido más adelante. Se agregó un `field_validator` que rechazaba valores `<= 0` al arrancar. Nota: este campo y su validador se eliminan por completo en este mismo release al retirar el backend de embeddings (ver Breaking arriba) — queda documentado por trazabilidad del fix, no porque siga existiendo.
-- Agregado `CORSMiddleware` al transporte HTTP.
-
-### Español como idioma principal del README
-
-`README.md` (la portada que GitHub muestra por default) ahora es la versión en español — el proyecto nació y se usa primero en México/LatAm, aunque sigue siendo OSS para audiencia global. El inglés se mantiene completo en `README.en.md`, con el language switcher cruzado en ambos. Sin cambios de contenido más allá del rename — paridad de secciones verificada entre ambas versiones.
-
-### `mcp-memory check` — diagnóstico de entorno + resiliencia de conexión local
-
-Comando CLI (`mcp-memory check` / `python -m mcp_memory check`) que verificaba en un solo paso: alcance de Qdrant (colección + dimensión de vector), alcance de Ollama (modelo pulled + test de generación de vector real). Auto-fallback de host cuando corría nativo fuera de Docker sin overrides (`qdrant`/`host.docker.internal` → `localhost`), y mensajes de error accionables en `OllamaEmbeddings` (404 → sugiere `ollama pull`, 401 → nota sobre Ollama Cloud, timeouts → verificar conectividad). **Reescrito en este mismo release** para el backend SQLite + FTS5 (ver Breaking arriba) — el comando sigue existiendo, pero valida FTS5/`DB_PATH` en vez de Qdrant/Ollama.
-
-### Fixed (previo a la reescritura del backend, sobre el `check` de Qdrant/Ollama)
-- El auto-fallback de host chequeaba `os.environ` para decidir si el usuario había configurado `QDRANT_URL`/`OLLAMA_URL`, pero un valor puesto solo en `.env` (el mecanismo documentado) nunca toca `os.environ` — se pisaba en silencio, afectando también al arranque real del servidor, no solo a `check`. Se corrigió comparando contra el default real de `Settings`.
-- `mcp-memory check` ignoraba en silencio un fallo de `GET /api/tags` si el test de embed subsiguiente daba 200 — podía reportar "todo OK" con Ollama parcialmente roto.
-- Se retiró una sección de `check` que leía variables de entorno sin ninguna funcionalidad implementada detrás en este proyecto.
-- `OllamaEmbeddings.embed()` no capturaba `httpx.ReadTimeout` (el timeout más probable en la práctica, con el modelo cargando en frío) — se corrigió envolviendo el error igual que el resto de fallos de red.
-- El chequeo de Qdrant en `check` usaba `AsyncQdrantClient` como context manager (`async with`), pero `qdrant-client>=1.18.0` (la versión pineada) no implementaba `__aenter__`/`__aexit__` — el chequeo fallaba siempre, sin importar la salud real de Qdrant. Se corrigió instanciando/cerrando explícitamente, igual que en `shared/store.py` de entonces.
-
-### Posibles próximos pasos
-- Backend de embeddings opcional (semántico) como alternativa configurable a BM25, si aparece un caso de uso real que lo justifique — no como default.
-- Publicación en PyPI como `agent-memory-mcp`.
-
-> Estos son posibles, no garantizados. PRs bienvenidos — lee [CONTRIBUTING.md](CONTRIBUTING.md).
+- **0.1.0–0.3.0**: reescritura de Node.js (stdio) a Python + FastMCP (Streamable HTTP), arquitectura vertical slice, namespaces, `/health`, `memory_export`/`memory_import` y CI. El almacenamiento usaba un backend vectorial externo con embeddings.
+- **0.4.0**: el backend se reemplazó por SQLite + FTS5 (BM25) para eliminar toda infra externa. `memory_search` pasó de búsqueda semántica a léxica, desapareció `min_score` y se introdujo `DB_PATH`.
 
 ---
 
-## [0.3.0] — 2026-06-05
-
-### Export e import de memorias
-
-Portabilidad completa: las memorias ahora se pueden volcar a JSONL y reimportar en otra instancia o namespace.
-
-### Added
-- **`memory_export`**: exporta todas las memorias (o un namespace) como JSONL. Pagina el store en bloques de 500 para no traer todo en RAM. Devuelve `count` (enteros exportados) y `jsonl` (string multilínea).
-- **`memory_import`**: importa un string JSONL producido por `memory_export`. Re-embebe cada entrada con el cliente de embeddings activo. Salta entradas cuyo `id` ya existe en el store (no sobreescribe). Acepta `namespace_override` para redirigir todas las entradas a un namespace distinto. Devuelve `imported`, `skipped` y `errors` (lista de `{line, error}` para líneas malformadas). Método `get(memory_id)` añadido al Protocol `MemoryStore`.
-- **11 tests unitarios nuevos** (`test_export.py` × 4, `test_import.py` × 7) — total de tests unitarios: 27.
-- **CI con GitHub Actions** (ruff + unit tests en Python 3.11/3.12/3.13 en cada PR), dependabot (pip + actions) y templates de issues/PRs.
-- **README canónico en inglés** + `README.es.md` con language switcher; badge de CI real en vez del estático.
-- **Imagen oficial publicada en GHCR**.
-
-### Fixed
-- `memory_stats` ya no lista "namespaces fantasma": el facet de Qdrant devolvía hits con `count: 0` para namespaces cuyos points habían sido borrados, y `stats()` no los filtraba.
-
----
-
-## [0.2.0] — 2026-06-03
-
-### Hardening de Qdrant externo + robustez de arranque
-
-Endurecimiento para producción y para el caso "ya tengo un Qdrant". Incluye **un cambio breaking** en la firma de las tools (ver abajo).
-
-### ⚠️ Breaking
-- **Inputs de las tools aplanados.** Las 7 tools ahora reciben los campos directos en `arguments` (`{"content": "...", "namespace": "..."}`) en vez del wrapper anidado `{"inp": {...}}`. El schema MCP que ven los clientes ya no está anidado. **Acción requerida:** si llamabas las tools por JSON-RPC crudo con `arguments.inp`, quita ese nivel. Los clientes MCP que generan argumentos a partir del schema no requieren cambios.
-
-### Added
-- **Validación de dimensión al arrancar.** `ensure_collection()` es idempotente: si la colección ya existe, valida que el `size` de sus vectores coincida con `EMBEDDING_DIM`; si difiere, aborta con un error claro en vez de corromper la búsqueda.
-- **Validación de dimensión del embedding.** El cliente Ollama compara el vector devuelto contra `EMBEDDING_DIM` y falla con mensaje explícito (modelo + dim devuelto + dim configurado) si no coinciden.
-- **Endpoint `GET /health`** → `{"status":"ok","qdrant":true|false}` (200 / 503). Pensado para healthchecks de Docker / orquestadores.
-- **Healthcheck del service `mcp-memory`** en `docker-compose.yml` usando `/health`.
-- **Arranque resiliente:** reintento con backoff exponencial (8 intentos, ~30s) alrededor de `ensure_collection()` mientras Qdrant levanta. Los errores de config (dim mismatch) fallan rápido, sin reintentar.
-- **Índice de payload `created_at`** (float) además de `namespace` y `updated_at`, para ordenar `oldest` server-side.
-- **Modo "Qdrant externo"**: `QDRANT_URL` overridable en el compose (`${QDRANT_URL:-http://qdrant:6333}`) y `depends_on` del Qdrant bundled marcado `required: false`, de modo que `docker compose up mcp-memory` levanta solo el server contra tu Qdrant. Documentado como **Modo C** en [INSTALL](docs/INSTALL.md).
-- **Tests de integración reales** (`server/tests/integration/`, marker `integration`): corren contra Qdrant + Ollama de verdad vía el transporte in-memory de FastMCP, sobre una colección efímera (`mcp_memory_itest`) que se crea y borra por sesión. Cubren save→search cross-keyword, update re-embed, recent ordenado, stats, delete y el error de dim mismatch. Auto-skip limpio si los servicios no responden.
-
-### Changed
-- **Embeddings migrados a `POST /api/embed`** (`{"model":...,"input":...}` → `{"embeddings":[[...]]}`), el endpoint moderno de Ollama, en lugar del legacy `/api/embeddings`.
-- **`recent()` y `stats()` ahora son server-side.** `recent()` usa `scroll` con `OrderBy(updated_at, DESC)` y `limit` real (antes traía hasta 10k puntos y ordenaba en Python). `stats()` usa `count(exact=True)`, `facet(key="namespace")` y dos `scroll` ordenados de `limit=1` para oldest/newest. El shape de salida no cambia.
-- **Índices de payload (re)asegurados en cada arranque**, también cuando la colección ya existe (idempotente: ignora el error de índice ya creado).
-- `docker-compose.yml`: imagen bump a `mcp-memory:0.2.0`.
-
-### Migración desde 0.1.0
-- Reemplaza `{"inp": {...}}` por los campos directos en cualquier llamada JSON-RPC cruda (ver Breaking).
-- Si reutilizabas una colección con dimensión distinta a `EMBEDDING_DIM`, el server ahora abortará al arrancar: corrige `EMBEDDING_DIM` o usa una `QDRANT_COLLECTION` nueva.
-
----
-
-## [0.1.0] — 2026-05-07
-
-### Reescritura completa: de Node.js stdio a Python MCP HTTP
-
-Primera versión publicable. La implementación previa en Node.js se eliminó del árbol vivo — su trazabilidad permanece en el git history (`git log --before=2026-05-07`).
-
-### Added
-- Servidor MCP en **Python 3.11** con [FastMCP](https://gofastmcp.com) (Streamable HTTP, `:8765/mcp`).
-- **Vertical-slice architecture**: una carpeta por tool en `server/src/mcp_memory/tools/` con handler aislado.
-- **7 tools MCP**:
-  - `memory_save` — guardar texto + tags + metadata, embebe automático.
-  - `memory_search` — búsqueda semántica con filtro por namespace y `min_score`.
-  - `memory_update` — modificar contenido/tags/metadata por id, re-embebe si cambia el contenido.
-  - `memory_delete` — borrar por id.
-  - `memory_list` — paginación por namespace.
-  - `memory_recent` — últimas N por `updated_at`.
-  - `memory_stats` — conteo, namespaces, oldest/newest.
-- **Namespaces** para separar memoria por proyecto/agente (filtro por payload con índice keyword en Qdrant).
-- **Ollama configurable** vía `OLLAMA_URL` + `OLLAMA_API_KEY`: soporta Ollama local, remoto y, en el futuro, cualquier endpoint Ollama-compatible.
-- **Modelo de embeddings parametrizable** (`EMBEDDING_MODEL` + `EMBEDDING_DIM`). Default: `bge-m3` (multilingüe, 1024 dims).
-- **`docker-compose.yml`** mínimo: solo Qdrant + mcp-memory. Ollama lo aporta el usuario.
-- **16 tests unitarios** con `FakeStore` y `FakeEmbeddings` — corren en <0.3s sin Docker ni Ollama.
-- **Documentación completa**: [README](README.md), [INSTALL](docs/INSTALL.md), [CLIENTS](docs/CLIENTS.md), [ARCHITECTURE](docs/ARCHITECTURE.md), [CONTRIBUTING](CONTRIBUTING.md).
-- **Ejemplos de configuración** listos para Claude Code, OpenCode, Cursor, Continue en [`examples/`](examples/).
-- **Imagen OG / social preview** (`docs/assets/og-image.png`).
-
-### Changed
-- Transport pasó de **stdio** (Node legacy) a **Streamable HTTP** — funciona con cualquier cliente MCP moderno sin wrappers.
-- Aislamiento conceptual cambió de `collection` (Node legacy) a `namespace` — una sola colección Qdrant + filtro por payload.
-- Modelo de embeddings default: `nomic-embed-text` (Node, 768 dim, inglés) → `bge-m3` (Python, 1024 dim, multilingüe).
-- Setup pasó de paths hardcodeados del servidor (Node legacy) a `docker compose up -d` self-contained.
-
-### Discovered (gotchas documentadas)
-- **Ollama Cloud (`https://ollama.com`) no expone modelos de embedding** — su catálogo cloud es solo chat (kimi-k2, deepseek, gpt-oss, etc.). `POST /api/embed` devuelve 401 incluso con API key válida para `/api/chat`. Documentado prominentemente en README + INSTALL.
-- El protocolo MCP **exige** `Accept: application/json, text/event-stream`. Sin él, FastMCP devuelve 406 / connection reset.
-- `EMBEDDING_DIM` debe coincidir EXACTO con la dimensión real del modelo, o Qdrant falla al insertar/buscar.
-
-### Disciplinas aplicadas
-Clean Code · SOLID (DIP con `Protocol`) · KISS · YAGNI · Vertical slice · Tests primero.
-
----
-
-## [Legacy] — 2026-02-26 (Node.js, eliminado del árbol)
-
-Primera implementación. **Eliminada del repo en 2026-05-07**; su código no se incluye en este repositorio.
-
-### Highlights de la versión legacy
-- Node.js, MCP **stdio** (`hook/memory-hook.js`, ~580 líneas).
-- Asumía Qdrant + proxy de embeddings ya levantados externamente.
-- 5 tools: `memory_add`, `memory_sync`, `memory_search`, `memory_delete`, `memory_stats`.
-- `nomic-embed-text` (768 dim) como embedding.
-- Aislamiento por `collection` (no namespace).
-- Setup con paths hardcodeados del servidor.
-
-### Por qué se reescribió
-- Cero infra externa: el nuevo stack arranca con un `docker compose up -d`.
-- Mantenibilidad: vertical slice + tests unitarios + Pydantic vs ~580 líneas planas en JS sin tests automatizados.
-- Multilingüe: `bge-m3` da resultados drásticamente mejores en español que `nomic-embed-text`.
-
----
-
-[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/GermaniU/mcp-memory/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/GermaniU/mcp-memory/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/GermaniU/mcp-memory/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/GermaniU/mcp-memory/releases/tag/v0.1.0
+[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/83f2f88...HEAD
+[0.5.0]: https://github.com/GermaniU/mcp-memory/commit/83f2f88

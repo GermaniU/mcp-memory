@@ -18,6 +18,11 @@ Convenciones del proyecto para sesiones de Claude Code.
 - **DIP**: dependencias externas (store) detrás de `Protocol` — los tests no deben requerir servicios externos.
 - Sin abstracciones especulativas (YAGNI).
 
+## Repo público: commits y PRs
+
+- **No incluir enlaces a sesiones de Claude** (`claude.ai/code/session_…`) **ni líneas de atribución** (`Co-Authored-By`, `Claude-Session`, "Generated with Claude Code") en commits, descripciones de PR ni comentarios.
+- Nada de rutas locales, emails, tokens ni datos del entorno de desarrollo en commits, PRs o docs.
+
 ## Regla anti-drift de docs
 
 **Todo PR que agregue, cambie o elimine tools MCP debe actualizar `README.md` + `README.en.md` (+ `CHANGELOG.md`) en el mismo diff. Un PR de tools sin docs se rechaza.**
