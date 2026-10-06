@@ -1,7 +1,7 @@
 """Smoke E2E contra un servidor mcp-memory corriendo (HTTP MCP real).
 
 Ejercita las 7 tools en orden: save -> search -> list -> recent -> update -> stats -> delete.
-Requiere: servidor en http://localhost:8765/mcp. Sin Qdrant, sin Ollama — SQLite local.
+Requiere: servidor en http://localhost:8765/mcp (SQLite local, sin servicios externos).
 
 Uso:
     .venv/bin/python scripts/smoke_e2e.py
@@ -109,7 +109,7 @@ async def main() -> int:
     if failures:
         print(f"SMOKE FAIL - {len(failures)} checks rotos: {failures}")
         return 1
-    print("SMOKE OK - las tools funcionan E2E contra SQLite local (sin Qdrant, sin Ollama)")
+    print("SMOKE OK - las tools funcionan E2E contra SQLite local")
     return 0
 
 

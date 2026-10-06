@@ -11,9 +11,8 @@ from mcp_memory.shared.types import Memory, MemoryStore
 class FakeStore(MemoryStore):
     """In-memory store para tests unitarios de handlers.
 
-    Búsqueda léxica simple (token/substring overlap) — no coseno, no BM25 real.
-    Suficiente para probar el contrato de los handlers sin arrastrar ningún
-    concepto de embeddings; el motor FTS5/BM25 real se prueba contra
+    Búsqueda léxica simple (token/substring overlap), no BM25 real.
+    Suficiente para probar el contrato de los handlers; el motor FTS5/BM25 real se prueba contra
     `SqliteFtsStore` en tests/unit/test_store.py y tests/integration/test_e2e.py.
     Orden: insertion.
     """

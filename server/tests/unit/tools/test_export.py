@@ -20,15 +20,10 @@ async def test_export_happy_path_returns_all_memories(store):
     # Cada línea es JSON válido con los campos esperados.
     for line in lines:
         obj = json.loads(line)
-        assert "id" in obj
-        assert "content" in obj
-        assert "namespace" in obj
-        assert "tags" in obj
-        assert "metadata" in obj
-        assert "created_at" in obj
-        assert "updated_at" in obj
-        # Sin vectores: portabilidad entre modelos de embedding.
-        assert "vector" not in obj
+        # Contrato exacto: es lo que memory_import espera, sin campos internos (score).
+        assert set(obj) == {
+            "id", "content", "namespace", "tags", "metadata", "created_at", "updated_at"
+        }
 
 
 async def test_export_namespace_filter(store):

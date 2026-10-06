@@ -1,10 +1,7 @@
 """Integration tests contra un SqliteFtsStore REAL — sin ningún servicio externo.
 
-Antes requerían Qdrant + Ollama vivos (marker `integration`, auto-skip si no
-respondían). Con el backend SQLite + FTS5 (ver
-docs/ARCHITECTURE.md) el path E2E real corre siempre: real
-SqliteFtsStore + FastMCP `Client(app)` transporte in-memory, sin mocks, sin
-marker. Cubre AC1-AC4, AC8-AC11, AC15-AC18.
+Real SqliteFtsStore + FastMCP `Client(app)` transporte in-memory, sin mocks
+ni marker de skip: corre siempre (ver docs/ARCHITECTURE.md). Cubre AC1-AC4, AC8-AC11, AC15-AC18.
 
 Run:  pytest tests/integration
 """

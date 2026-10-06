@@ -62,12 +62,6 @@ Thumbs.db
 
 # Runtime data (Docker volumes mounted locally)
 data/
-qdrant-data/
-ollama-data/
-
-# Legacy node residuals
-legacy/**/node_modules/
-legacy/**/*.log
 
 # Archivos personales de asistentes IA — nunca publicarlos
 AGENTS.md
