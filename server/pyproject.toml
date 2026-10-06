@@ -5,21 +5,43 @@ description = "Local agent memory exposed via MCP. SQLite + FTS5 (BM25 lexical s
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "GermaniU" }]
+keywords = [
+    "mcp", "mcp-server", "model-context-protocol", "ai-agents", "agent-memory",
+    "sqlite", "fts5", "bm25", "claude-code", "cursor", "local-first",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 dependencies = [
     "fastmcp>=2.5.0",
-    "aiosqlite>=0.20.0",
-    "pydantic>=2.7.0",
-    "pydantic-settings>=2.14.1",
+    "aiosqlite>=0.22.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.16",
+    "ruff>=0.16.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/GermaniU/mcp-memory"
+Documentation = "https://github.com/GermaniU/mcp-memory/tree/main/docs"
+Issues = "https://github.com/GermaniU/mcp-memory/issues"
+Changelog = "https://github.com/GermaniU/mcp-memory/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mcp-memory = "mcp_memory.cli:main"

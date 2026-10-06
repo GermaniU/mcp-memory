@@ -317,3 +317,35 @@ async def test_ac18_external_reader_does_not_fail_under_wal(tmp_path):
             external.close()
     finally:
         await store.aclose()
+
+
+async def test_tools_expose_mcp_safety_annotations(app):
+    """Los clientes usan estos hints para auto-aprobar lecturas y confirmar borrados."""
+    async with Client(app) as c:
+        listed = await c.list_tools()
+    # Formato de cable (camelCase): estable entre el SDK MCP v1 y v2, que renombró
+    # los atributos Python a snake_case.
+    tools = {
+        tool.name: tool.annotations.model_dump(mode="json", by_alias=True, exclude_none=True)
+        for tool in listed
+    }
+
+    read_only = {"memory_search", "memory_list", "memory_recent", "memory_stats", "memory_export"}
+    for name in read_only:
+        assert tools[name]["readOnlyHint"] is True, name
+    for name in ("memory_delete", "memory_update"):
+        assert tools[name]["readOnlyHint"] is False, name
+        assert tools[name]["destructiveHint"] is True, name
+    for name in ("memory_save", "memory_import"):
+        assert tools[name]["readOnlyHint"] is False, name
+        assert tools[name]["destructiveHint"] is False, name
+    assert all(hints["openWorldHint"] is False for hints in tools.values())
+
+
+async def test_server_sends_usage_instructions_to_the_client(app):
+    async with Client(app) as c:
+        # FastMCP >=4 negocia vía server/discover (sin InitializeResult) y expone
+        # `instructions` directo en el cliente; versiones previas, en initialize_result.
+        instructions = getattr(c, "instructions", None) or c.initialize_result.instructions
+    assert instructions
+    assert "memory_search" in instructions

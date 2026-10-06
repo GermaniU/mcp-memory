@@ -53,21 +53,25 @@ Verifica que tu Python tiene FTS5 compilado y que `DB_PATH` es accesible al inst
 mcp-memory check
 ```
 
+`mcp-memory --help` lista los comandos y variables de entorno; `mcp-memory --version` imprime la versión instalada.
+
 ---
 
 ## 🛠 Tools MCP expuestas
 
-| Tool             | Para qué |
-|------------------|----------|
-| `memory_save`    | Guardar texto + tags + metadata. |
-| `memory_search`  | Búsqueda léxica (BM25 vía SQLite FTS5) con filtro por namespace. |
-| `memory_update`  | Cambiar contenido/tags/metadata por id. Re-sincroniza el índice FTS5 si cambia el contenido. |
-| `memory_delete`  | Borrar por id. |
-| `memory_list`    | Paginado por namespace. |
-| `memory_recent`  | Las últimas N por `updated_at`. |
-| `memory_stats`   | Conteo, namespaces, oldest/newest. |
-| `memory_export`  | Exporta todas las memorias (o las de un namespace) como JSONL. Devuelve `count` y el string `jsonl`. |
-| `memory_import`  | Importa un string JSONL producido por `memory_export`. Salta colisiones de id silenciosamente. Acepta `namespace_override` opcional. |
+| Tool             | Tipo | Para qué |
+|------------------|------|----------|
+| `memory_save`    | ✏️ escritura | Guardar texto + tags + metadata. |
+| `memory_search`  | 👁 lectura | Búsqueda léxica (BM25 vía SQLite FTS5) con filtro por namespace. |
+| `memory_update`  | ⚠️ destructiva | Cambiar contenido/tags/metadata por id. Re-sincroniza el índice FTS5 si cambia el contenido. Rechaza `content` vacío. |
+| `memory_delete`  | ⚠️ destructiva | Borrar por id. |
+| `memory_list`    | 👁 lectura | Paginado por namespace. |
+| `memory_recent`  | 👁 lectura | Las últimas N por `updated_at`. |
+| `memory_stats`   | 👁 lectura | Conteo, namespaces, oldest/newest. |
+| `memory_export`  | 👁 lectura | Exporta todas las memorias (o las de un namespace) como JSONL. Devuelve `count` y el string `jsonl`. |
+| `memory_import`  | ✏️ escritura | Importa un string JSONL producido por `memory_export`. Salta colisiones de id silenciosamente. Acepta `namespace_override` opcional. |
+
+El **Tipo** se publica como [anotaciones MCP](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations) (`readOnlyHint`, `destructiveHint`): los clientes que las soportan pueden auto-aprobar las lecturas y pedir confirmación antes de modificar o borrar. Al conectarse, el server también envía `instructions` al agente (cuándo buscar, cuándo guardar, cómo formular queries léxicas).
 
 Schemas + ejemplos de invocación en [`docs/CLIENTS.md`](docs/CLIENTS.md).
 
@@ -184,8 +188,8 @@ Detalle completo + workflow paso a paso en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q          # 67 unit tests, ~1s
-pytest tests/integration -q   # E2E real contra SQLite/FTS5, sin servicios externos
+pytest tests/unit -q          # 75 unit tests, ~1s
+pytest tests/integration -q   # 16 tests E2E reales contra SQLite/FTS5, sin servicios externos
 ruff check src tests scripts
 ```
 
