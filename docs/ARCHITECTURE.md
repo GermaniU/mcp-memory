@@ -40,7 +40,7 @@ Cada slice es **una función pura** que recibe sus dependencias por keyword argu
 - Un único archivo SQLite; namespaces se filtran por columna indexada (`idx_memories_namespace`). Sin bases de datos por namespace ni por usuario.
 - `recent` y `stats` resuelven server-side con SQL directo (`ORDER BY updated_at DESC LIMIT`, `COUNT`/`DISTINCT`) — sin traer todo a Python para ordenar.
 - El servidor expone solo `streamable-http`. stdio se añade cuando un usuario real lo pida.
-- `DB_PATH` inyectable vía `.env`. No hay "registry de backends" — cuando exista una segunda implementación real de `MemoryStore` se evaluará la abstracción, no antes (YAGNI aplicado en ambas direcciones: se removió `EmbeddingsClient` por completo en la migración a SQLite + FTS5 en vez de dejarlo como abstracción muerta).
+- `DB_PATH` inyectable vía `.env`. No hay "registry de backends" — cuando exista una segunda implementación real de `MemoryStore` se evaluará la abstracción, no antes (YAGNI).
 
 ### Tests
 
@@ -80,7 +80,7 @@ Memory {
 ### Flujo `memory_search`
 
 1. Cliente llama `memory_search(query, namespace?, limit)`.
-2. El handler pasa `query` tal cual al store — no hay paso de embedding.
+2. El handler pasa `query` tal cual al store, sin preprocesar.
 3. `store.search(...)` tokeniza la query y construye un `match_expr` de FTS5 donde **cada token se escapa y envuelve en comillas dobles**, unidos con `OR` — neutraliza cualquier sintaxis especial de FTS5 (`AND`/`OR`/`NOT`/`NEAR`, `*`, `:`, `-`) tratándola como texto literal, maximizando recall en vez de fallar la query completa.
 4. Ejecuta `SELECT ... FROM memories_fts JOIN memories ... WHERE memories_fts MATCH :match_expr AND namespace = :namespace ORDER BY bm25(memories_fts) ASC LIMIT :limit` (BM25 de SQLite: más negativo = más relevante).
 5. Normaliza los `raw_score` de la página de resultados a `[0,1]` con min-max **dentro de esa misma llamada** (no hay un score absoluto comparable entre búsquedas).
@@ -88,7 +88,7 @@ Memory {
 
 ## No-goals (por ahora)
 
-- **Búsqueda semántica.** BM25/FTS5 es léxico — matchea términos, no significado. Si el caso de uso real lo exige (paráfrasis sin overlap de vocabulario), se evaluará un backend de embeddings de vuelta, pero como opción configurable, no como default.
+- **Búsqueda semántica.** BM25/FTS5 es léxico — matchea términos, no significado. Si el caso de uso real lo exige (paráfrasis sin overlap de vocabulario), se evaluará un backend de embeddings como opción configurable, no como default.
 - **Multi-usuario / multi-tenant**: el repo asume "una persona, una máquina". Aislamiento entre proyectos = namespaces.
 - **Auth/ACL**: escucha en `127.0.0.1` por defecto. Puedes sobreescribir con la variable `MCP_HOST` si necesitas exponerlo en red, pero en ese caso eres responsable de poner un proxy con auth delante. Además, el CORS está cerrado por defecto (`MCP_CORS_ORIGINS` vacío), para que ninguna página web abierta en el navegador pueda leer o borrar memorias vía `fetch` a localhost. Ver [`SECURITY.md`](../SECURITY.md).
 - **Soporte multimodal** (imágenes, PDF como blobs).

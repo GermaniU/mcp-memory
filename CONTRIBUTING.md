@@ -200,8 +200,8 @@ Si crees que tu caso justifica una excepción, abre un issue **antes** del PR co
 
 ## 🤔 Preguntas frecuentes
 
-**¿Por qué SQLite + FTS5 y no Qdrant / sqlite-vec / ChromaDB?**
-- Cero infra externa: un único archivo local, sin Docker ni modelos que descargar. BM25 cubre bien el caso real (buscar por términos, nombres e identificadores). Hasta la 0.3.0 se usaba Qdrant + Ollama; ver `CHANGELOG.md`.
+**¿Por qué SQLite + FTS5 y no una base vectorial (sqlite-vec, ChromaDB…)?**
+- Cero infra externa: un único archivo local, sin Docker ni modelos que descargar. BM25 cubre bien el caso real (buscar por términos, nombres e identificadores).
 
 **¿Por qué Python y no Go/Rust/Node?**
 - SDK MCP maduro en Python (FastMCP) y `sqlite3` con FTS5 en la librería estándar. Si en el futuro queremos un binario único, se reescribirá.
