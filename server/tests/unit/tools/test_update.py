@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from mcp_memory.tools.save.handler import SaveInput, save
 from mcp_memory.tools.update.handler import UpdateInput, update
 
@@ -35,3 +37,17 @@ async def test_update_missing_returns_none(store):
         store=store,
     )
     assert out is None
+
+
+async def test_update_rejects_blank_content_and_keeps_original(store):
+    saved = await save(SaveInput(content="v1"), store=store, default_namespace="default")
+    with pytest.raises(ValueError):
+        await update(UpdateInput(id=saved.id, content="   \n"), store=store)
+    assert (await store.get(saved.id)).content == "v1"
+
+
+async def test_update_strips_content(store):
+    saved = await save(SaveInput(content="v1"), store=store, default_namespace="default")
+    out = await update(UpdateInput(id=saved.id, content="  v2  "), store=store)
+    assert out is not None
+    assert out.content == "v2"
