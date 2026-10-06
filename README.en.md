@@ -53,21 +53,25 @@ Verify your Python has FTS5 compiled and that `DB_PATH` is accessible, instantly
 mcp-memory check
 ```
 
+`mcp-memory --help` lists the commands and environment variables; `mcp-memory --version` prints the installed version.
+
 ---
 
 ## 🛠 Exposed MCP tools
 
-| Tool             | What it does |
-|------------------|--------------|
-| `memory_save`    | Save text + tags + metadata. |
-| `memory_search`  | Lexical search (BM25 via SQLite FTS5) with namespace filter. |
-| `memory_update`  | Update content/tags/metadata by id. Re-syncs the FTS5 index if content changes. |
-| `memory_delete`  | Delete by id. |
-| `memory_list`    | Paginated listing by namespace. |
-| `memory_recent`  | The last N entries by `updated_at`. |
-| `memory_stats`   | Count, namespaces, oldest/newest. |
-| `memory_export`  | Export all memories (or a namespace) as JSONL. Returns `count` and a `jsonl` string. |
-| `memory_import`  | Import a JSONL string produced by `memory_export`. Skips id collisions silently. Accepts optional `namespace_override`. |
+| Tool             | Kind | What it does |
+|------------------|------|--------------|
+| `memory_save`    | ✏️ write | Save text + tags + metadata. |
+| `memory_search`  | 👁 read | Lexical search (BM25 via SQLite FTS5) with namespace filter. |
+| `memory_update`  | ⚠️ destructive | Update content/tags/metadata by id. Re-syncs the FTS5 index if content changes. Rejects empty `content`. |
+| `memory_delete`  | ⚠️ destructive | Delete by id. |
+| `memory_list`    | 👁 read | Paginated listing by namespace. |
+| `memory_recent`  | 👁 read | The last N entries by `updated_at`. |
+| `memory_stats`   | 👁 read | Count, namespaces, oldest/newest. |
+| `memory_export`  | 👁 read | Export all memories (or a namespace) as JSONL. Returns `count` and a `jsonl` string. |
+| `memory_import`  | ✏️ write | Import a JSONL string produced by `memory_export`. Skips id collisions silently. Accepts optional `namespace_override`. |
+
+The **Kind** is published as [MCP tool annotations](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations) (`readOnlyHint`, `destructiveHint`): clients that support them can auto-approve reads and ask for confirmation before modifying or deleting. On connect, the server also sends `instructions` to the agent (when to search, when to save, how to phrase lexical queries).
 
 Schemas and invocation examples in [`docs/CLIENTS.md`](docs/CLIENTS.md) (in Spanish).
 
@@ -184,8 +188,8 @@ Full details and step-by-step workflow in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q          # 67 unit tests, ~1s
-pytest tests/integration -q   # real E2E against SQLite/FTS5, no external services
+pytest tests/unit -q          # 75 unit tests, ~1s
+pytest tests/integration -q   # 16 real E2E tests against SQLite/FTS5, no external services
 ruff check src tests scripts
 ```
 

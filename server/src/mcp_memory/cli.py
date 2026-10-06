@@ -1,17 +1,20 @@
 """cli.py — CLI entry point for mcp-memory.
 
 Supports:
-  mcp-memory         -> Launches the FastMCP HTTP server.
-  mcp-memory check   -> Runs environment diagnostics (FTS5, db_path).
+  mcp-memory             -> Launches the FastMCP HTTP server.
+  mcp-memory check       -> Runs environment diagnostics (FTS5, db_path).
+  mcp-memory --version   -> Prints the installed version.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sqlite3
 import sys
 from pathlib import Path
 
+from mcp_memory import __version__
 from mcp_memory.server import main as server_main
 from mcp_memory.shared.config import get_settings
 
@@ -86,8 +89,28 @@ async def run_diagnostics() -> bool:
     return all_ok
 
 
-def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] in ("check", "--check", "-c"):
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mcp-memory",
+        description=(
+            "Local agent memory over MCP (SQLite + FTS5). Without arguments, starts the "
+            "Streamable HTTP server. Configuration comes from env vars / .env "
+            "(DB_PATH, MCP_HOST, MCP_PORT, DEFAULT_NAMESPACE, MCP_CORS_ORIGINS)."
+        ),
+    )
+    parser.add_argument("--version", "-V", action="version", version=f"%(prog)s {__version__}")
+    # `--check`/`-c` se mantienen por compatibilidad con versiones anteriores.
+    parser.add_argument("--check", "-c", action="store_true", help=argparse.SUPPRESS)
+    subcommands = parser.add_subparsers(dest="command")
+    subcommands.add_parser("check", help="Run environment diagnostics (FTS5, DB_PATH) and exit.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    # Antes cualquier argumento desconocido (incluido --help) arrancaba el server;
+    # argparse muestra la ayuda o falla con exit code 2.
+    args = _build_parser().parse_args(argv)
+    if args.command == "check" or args.check:
         success = asyncio.run(run_diagnostics())
         sys.exit(0 if success else 1)
     else:

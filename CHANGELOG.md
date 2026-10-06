@@ -8,7 +8,21 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Added
+- **Anotaciones MCP en las 9 tools** (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`): `memory_search`/`list`/`recent`/`stats`/`export` se marcan como solo lectura, `memory_update`/`delete` como destructivas y `memory_save`/`import` como escrituras no destructivas. Los clientes que las soportan pueden auto-aprobar lecturas y pedir confirmación antes de modificar o borrar.
+- **`instructions` del servidor**: al conectarse, el agente recibe una guía breve de uso (buscar antes de responder sobre el usuario, queries con palabras clave literales porque la búsqueda es léxica, preferir `memory_update` a duplicar).
+- CLI: `mcp-memory --version` / `-V` y `mcp-memory --help`.
+- `HEALTHCHECK` en el `Dockerfile` (consulta `/health` con la stdlib, sin instalar curl); el smoke test de CI verifica que el contenedor llegue a `healthy`.
+- CI: los tests de integración (`tests/integration`) corren en toda la matriz de Python — antes solo corrían los unitarios.
+- `pyproject.toml`: `keywords`, `classifiers` y `[project.urls]` para que el paquete muestre metadatos útiles.
+
+### Fixed
+- `mcp-memory --help` (o cualquier argumento desconocido, como un typo) **arrancaba el servidor** en vez de mostrar ayuda o fallar. Ahora el CLI usa `argparse`: `--help` muestra la ayuda y un argumento inválido sale con código 2. `check`, `--check` y `-c` siguen funcionando.
+- `memory_update` aceptaba `content` vacío o solo espacios (dejando una memoria imposible de encontrar por FTS5), mientras que `memory_save` lo rechazaba. Ahora aplica el mismo criterio: recorta espacios y rechaza contenido vacío sin modificar la memoria.
+- La descripción de `memory_export` mencionaba "no vectors", resto del backend de embeddings retirado en 0.4.0.
+
 ### Changed
+- Dependencias: pisos mínimos subidos a `pydantic>=2.13.5`, `pydantic-settings>=2.15.0`, `aiosqlite>=0.22.1` y, en dev, `pytest-asyncio>=1.4.0` y `ruff>=0.16.9`. `uv.lock` regenerado (seguía declarando `mcp-memory` 0.4.0). Release: `docker/setup-buildx-action@v4` y `docker/metadata-action@v6` (runtime Node 24, sin cambios en los inputs usados).
 - Plantilla de bug report actualizada al backend actual (sin Qdrant/embeddings; pide `mcp-memory check`, health y `MCP_CORS_ORIGINS`) y enlace al reporte privado de vulnerabilidades.
 - Imagen de portada (`docs/assets/og-image.png`/`.svg`) rediseñada: icono de base de datos con búsqueda BM25, texto acorde al backend actual (SQLite + FTS5) y mismo estilo que tor-mcp-proxy.
 

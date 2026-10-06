@@ -25,7 +25,7 @@ server/src/mcp_memory/
 
 Cada slice es **una función pura** que recibe sus dependencias por keyword arguments. Esto significa:
 
-- **Test unitario sin infra externa**: `pytest tests/unit` corre con un `FakeStore` in-memory. 67 tests, ~1s.
+- **Test unitario sin infra externa**: `pytest tests/unit` corre con un `FakeStore` in-memory. 75 tests, ~1s.
 - **Añadir una tool nueva**: una carpeta nueva en `tools/`, un decorador `@mcp.tool` en `server.py`. Cero acoplamiento con las existentes (OCP).
 
 ### SOLID, sin sobreingeniería
@@ -44,8 +44,8 @@ Cada slice es **una función pura** que recibe sus dependencias por keyword argu
 
 ### Tests
 
-- **Unit (60)**: `tests/unit/` — `test_store.py` cubre `SqliteFtsStore` contra `:memory:` (schema, CRUD, ranking BM25, normalización de score, escape de sintaxis FTS5); `test_config.py` y `test_cli.py` cubren `Settings`/`mcp-memory check`; `tests/unit/tools/` tiene 1 archivo por slice con `FakeStore` (búsqueda léxica simple por overlap de tokens, no BM25 real — el contrato del handler no depende del motor de ranking).
-- **Integration (14)**: `tests/integration/test_e2e.py` — corre contra un `SqliteFtsStore` **real** (archivo temporal) vía el transporte in-memory de FastMCP (`Client(app)`), sin mocks y sin ningún servicio externo. Cubre save→search con ranking BM25, update que re-sincroniza el índice FTS5, recent ordenado, stats, delete, export/import y el escape de sintaxis especial de FTS5 en la query. Corre siempre — no tiene marker de skip: `pytest tests/integration`.
+- **Unit (75)**: `tests/unit/` — `test_store.py` cubre `SqliteFtsStore` contra `:memory:` (schema, CRUD, ranking BM25, normalización de score, escape de sintaxis FTS5); `test_config.py` y `test_cli.py` cubren `Settings` y el CLI (`check`, `--version`, `--help`); `tests/unit/tools/` tiene 1 archivo por slice con `FakeStore` (búsqueda léxica simple por overlap de tokens, no BM25 real — el contrato del handler no depende del motor de ranking).
+- **Integration (16)**: `tests/integration/test_e2e.py` — corre contra un `SqliteFtsStore` **real** (archivo temporal) vía el transporte in-memory de FastMCP (`Client(app)`), sin mocks y sin ningún servicio externo. Cubre save→search con ranking BM25, update que re-sincroniza el índice FTS5, recent ordenado, stats, delete, export/import, el escape de sintaxis especial de FTS5 en la query, y las anotaciones MCP + `instructions` que ve el cliente. Corre siempre — no tiene marker de skip: `pytest tests/integration`.
 
 ### Datos
 
