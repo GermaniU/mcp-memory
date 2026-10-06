@@ -22,4 +22,9 @@ USER mcp
 VOLUME ["/data"]
 EXPOSE 8765
 
+# La imagen slim no trae curl: se usa urllib de la stdlib. /health devuelve 503
+# si SQLite no responde, lo que hace fallar urlopen.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"MCP_PORT\", \"8765\")}/health', timeout=2)"]
+
 CMD ["python", "-m", "mcp_memory"]

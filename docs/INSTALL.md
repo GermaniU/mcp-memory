@@ -112,7 +112,7 @@ curl http://localhost:8765/health
 # {"status":"ok","db":false}  -> 503 si no responde
 ```
 
-Útil para healthchecks de systemd/launchd/orquestadores si corres el server como servicio de fondo.
+Útil para healthchecks de systemd/launchd/orquestadores si corres el server como servicio de fondo. La imagen Docker ya trae un `HEALTHCHECK` que lo consulta cada 10 s: `docker ps` muestra el contenedor como `healthy`/`unhealthy`.
 
 ---
 
