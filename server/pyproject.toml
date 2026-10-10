@@ -23,7 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastmcp>=2.5.0",
+    "fastmcp>=4.0.11",
     "aiosqlite>=0.22.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
