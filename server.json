@@ -16,6 +16,7 @@
       "transport": {
         "type": "stdio"
       },
+      "runtimeHint": "docker",
       "runtimeArguments": [
         {
           "type": "named",
@@ -28,6 +29,15 @@
         {
           "type": "positional",
           "value": "--stdio"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "DB_PATH",
+          "description": "Path to the SQLite file inside the container. Keep it under the mounted volume (/data) so memories survive restarts.",
+          "format": "string",
+          "isRequired": false,
+          "default": "/data/memory.db"
         }
       ]
     }
