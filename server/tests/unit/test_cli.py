@@ -94,9 +94,24 @@ def test_cli_main_legacy_check_flags(flag):
 
 
 def test_cli_main_without_args_starts_server():
+    """Sin flag de transporte decide MCP_TRANSPORT (default http) en server.main."""
     with patch("mcp_memory.cli.server_main") as mock_server:
         main([])
-    mock_server.assert_called_once_with()
+    mock_server.assert_called_once_with(transport=None)
+
+
+@pytest.mark.parametrize(("flag", "transport"), [("--stdio", "stdio"), ("--http", "http")])
+def test_cli_transport_flags(flag, transport):
+    with patch("mcp_memory.cli.server_main") as mock_server:
+        main([flag])
+    mock_server.assert_called_once_with(transport=transport)
+
+
+def test_cli_stdio_and_http_are_mutually_exclusive():
+    with patch("mcp_memory.cli.server_main") as mock_server, pytest.raises(SystemExit) as exc:
+        main(["--stdio", "--http"])
+    assert exc.value.code == 2
+    mock_server.assert_not_called()
 
 
 def test_cli_version_prints_version_without_starting_server(capsys):

@@ -7,16 +7,22 @@
 # MCP Memory — Memoria local para agentes IA vía MCP
 
 > **Lleva la memoria de tu agente IA a cualquier máquina.**
-> Servidor MCP open source que da memoria persistente con búsqueda léxica (BM25) a Claude Code, OpenCode, Cursor, Continue y cualquier cliente compatible con [Model Context Protocol](https://modelcontextprotocol.io). SQLite + FTS5, **cero infra externa, 100% en tu hardware**.
+> Servidor MCP open source que da memoria persistente con búsqueda léxica (BM25) a Claude Desktop, Claude Code, OpenCode, Cursor, Continue y cualquier cliente compatible con [Model Context Protocol](https://modelcontextprotocol.io). SQLite + FTS5, **cero infra externa, 100% en tu hardware**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-green)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-stdio_%7C_Streamable_HTTP-green)](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](server/pyproject.toml)
 [![CI](https://github.com/GermaniU/mcp-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/GermaniU/mcp-memory/actions/workflows/ci.yml)
 [![SQLite](https://img.shields.io/badge/Storage-SQLite%20%2B%20FTS5-003B57?logo=sqlite&logoColor=white)](server/src/mcp_memory/shared/store.py)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Tags:** `mcp-server` · `ai-agents` · `sqlite` · `fts5` · `bm25` · `claude-code` · `cursor` · `opencode` · `lexical-search` · `agent-memory` · `local-first` · `self-hosted`
+
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="El agente guarda un recuerdo en una sesión y lo recupera en otra" width="780">
+</p>
+
+<p align="center"><sub>El agente guarda algo en una sesión y lo recuerda en otra — mismo archivo SQLite, proceso nuevo. Sin nube, sin vectores, sin servicios extra.</sub></p>
 
 ---
 
@@ -30,7 +36,26 @@ Los agentes IA olvidan todo entre conversaciones. Las soluciones existentes son 
 
 ---
 
-## ⚡ Quickstart (3 comandos)
+## ⚡ Quickstart
+
+Hay dos formas de correrlo. Elige una:
+
+| Modo | Cuándo | Cómo arranca |
+|------|--------|--------------|
+| **stdio** | Claude Desktop, Claude Code, Cursor… (lo más simple) | El cliente lanza el proceso él solo. No hay server de fondo ni puerto. |
+| **HTTP** | Varios clientes contra un mismo server, Docker, clientes web | Lo arrancas tú y queda escuchando en `http://localhost:8765/mcp`. |
+
+### Opción A — stdio (sin dejar nada corriendo)
+
+Con [`uv`](https://docs.astral.sh/uv/) instalado no hace falta clonar: el cliente descarga y lanza el server en cada sesión. Para Claude Code:
+
+```bash
+claude mcp add -s user mcp-memory -- uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio
+```
+
+Para Claude Desktop, Cursor y el resto, la config JSON está en [`docs/CLIENTS.md`](docs/CLIENTS.md#modo-stdio-recomendado). Todos los procesos comparten el mismo archivo SQLite (`DB_PATH`), así que la memoria es la misma en todos tus clientes.
+
+### Opción B — HTTP (server de fondo)
 
 ```bash
 git clone https://github.com/GermaniU/mcp-memory.git
@@ -44,6 +69,8 @@ mcp-memory
 No hay pre-requisitos: nada que levantar, nada que descargar. Al arrancar, el server crea el archivo SQLite (`DB_PATH`, default `~/.agent-memory/memory.db`) y su schema (tabla `memories` + índice FTS5) si no existen.
 
 Endpoint MCP: `http://localhost:8765/mcp`. Pégalo en la config de tu cliente (ver [`docs/CLIENTS.md`](docs/CLIENTS.md) — Claude Code, OpenCode, Cursor, Continue).
+
+> `mcp-memory --stdio` (o `MCP_TRANSPORT=stdio`) arranca el modo stdio con la instalación local.
 
 ### 🔍 Diagnóstico y Chequeo de Salud
 
@@ -95,17 +122,41 @@ MCP Memory es deliberadamente pequeño. Hace **una cosa bien: memoria léxica de
 - ❌ **No es multi-tenant.** Una persona, una máquina, una memoria (con namespaces para separar contextos).
 - ❌ **No tiene UI propia.** Lo administras desde el agente o por curl/MCP.
 - ❌ **No sincroniza entre máquinas.** Backup manual (copiar el archivo `.db`) si quieres mover datos.
-- ❌ **No tiene auth.** Solo escucha en `localhost` y con CORS cerrado. Si lo expones a internet, pon un proxy con auth. Ver [`SECURITY.md`](SECURITY.md).
+- ❌ **No tiene auth.** En modo HTTP solo escucha en `localhost` y con CORS cerrado (en stdio no abre ningún puerto). Si lo expones a internet, pon un proxy con auth. Ver [`SECURITY.md`](SECURITY.md).
 
 Si necesitas algo de la lista NO, abre un [issue](https://github.com/GermaniU/mcp-memory/issues) con caso de uso real (no especulativo) — vamos por demanda, no por especulación.
 
 ---
 
+## 🧭 ¿Y el `server-memory` oficial?
+
+El MCP oficial incluye [`server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) (`@modelcontextprotocol/server-memory`). No compiten por el mismo trabajo: ese es un **grafo de conocimiento**; este es **memoria léxica de texto**. Elige según lo que necesites recordar.
+
+| | **MCP Memory** (este) | **`server-memory`** (oficial) |
+|---|---|---|
+| Modelo de datos | Entradas de texto planas (`content` + `tags` + `metadata`) | Grafo: entidades + relaciones + observaciones |
+| Almacenamiento | Un archivo **SQLite** con índice **FTS5** | Un archivo **JSONL** con el grafo completo |
+| Búsqueda | **BM25 con ranking** (FTS5), filtrada por `namespace` | `search_nodes`: match por *substring* en nombre/tipo/observaciones, **sin ranking** |
+| Namespaces | ✅ un pool por proyecto o agente | ❌ |
+| Tags / metadata libres | ✅ por entrada | ❌ |
+| Export / import | ✅ `memory_export` / `memory_import` (JSONL) | ❌ hay que leer y escribir el archivo |
+| Transporte | **stdio + Streamable HTTP** | stdio |
+| Coste de leer | Ranking en SQLite: traes solo los hits | `read_graph` devuelve el grafo entero |
+
+**En una frase:**
+- Si tu problema son **hechos con relaciones** («Ana *trabaja_en* Acme», «*padre_de*…»), usa el grafo oficial.
+- Si tu problema es **recordar notas y decisiones y encontrarlas por palabra clave**, separadas por proyecto y con export/import, usa MCP Memory.
+
+No es «mejor que»: es **otra herramienta para otro trabajo** — y la que no te obliga a cargar el grafo completo en cada consulta.
+
+---
+
 ## 🔌 Conectar tu cliente
 
-Configuración lista para copiar en [`docs/CLIENTS.md`](docs/CLIENTS.md):
+Configuración lista para copiar en [`docs/CLIENTS.md`](docs/CLIENTS.md) (stdio y HTTP):
 
-- 🟦 **Claude Code** — `claude mcp add -s user -t http mcp-memory http://localhost:8765/mcp` (las tools aparecen en sesiones nuevas).
+- 🟫 **Claude Desktop** — `claude_desktop_config.json` con `"command": "uvx"` (stdio).
+- 🟦 **Claude Code** — `claude mcp add -s user mcp-memory -- uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio`, o por HTTP `claude mcp add -s user -t http mcp-memory http://localhost:8765/mcp` (las tools aparecen en sesiones nuevas).
 - 🟧 **Cursor** — Settings → MCP Servers → Add new MCP Server.
 - 🟩 **Continue** (VS Code / JetBrains) — `~/.continue/config.json`.
 - 🟪 **OpenCode** — `~/.config/opencode/config.json`.
@@ -188,8 +239,8 @@ Detalle completo + workflow paso a paso en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q          # 75 unit tests, ~1s
-pytest tests/integration -q   # 16 tests E2E reales contra SQLite/FTS5, sin servicios externos
+pytest tests/unit -q          # 81 unit tests, ~1s
+pytest tests/integration -q   # 17 tests E2E reales contra SQLite/FTS5 (incluye stdio), sin servicios externos
 ruff check src tests scripts
 ```
 

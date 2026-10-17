@@ -8,7 +8,17 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] — 2026-10-17
+
 ### Added
+- **Demo grabable** (`server/scripts/demo_recall.py` y `docs/assets/demo.gif`): el agente guarda un recuerdo en una sesión y lo recupera en otra contra el mismo archivo SQLite — el flujo que el README muestra al inicio. El script habla MCP real (dos clientes independientes, sin estado compartido salvo el `.db`), no texto inventado.
+- README (ES/EN): GIF del demo bajo el hero y sección **«¿Y el `server-memory` oficial?»** con la comparación honesta frente al grafo oficial (modelo de datos, búsqueda, namespaces, export/import, transporte).
+- **Transporte stdio**: `mcp-memory --stdio` (o `MCP_TRANSPORT=stdio`) sirve MCP por stdin/stdout, para que el cliente lance el proceso él solo — sin server de fondo ni puerto abierto. Es lo que piden Claude Desktop y la mayoría de clientes. Con `uv` no hace falta clonar: `uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio`. Los logs van a stderr para no corromper el canal JSON-RPC; un test E2E lanza el subproceso real y lo verifica. HTTP sigue siendo el default (`--http` lo fuerza).
+- Docs: configuración stdio para Claude Desktop, Claude Code y Cursor en `docs/CLIENTS.md`, y `examples/claude-desktop.json`.
+- **MCP Registry**: `server.json` (namespace `io.github.GermaniU/mcp-memory`, imagen OCI de GHCR por stdio) y job `mcp-registry` en `release.yml`, que lo publica con login OIDC de GitHub Actions al empujar un tag `v*`. La imagen lleva el label `io.modelcontextprotocol.server.name` que el registry usa para verificar la propiedad; CI comprueba que coincida con `server.json`.
+- Imagen Docker: `ENTRYPOINT` en vez de `CMD`, para que `docker run -i --rm ghcr.io/germaniu/mcp-memory --stdio` funcione; el `HEALTHCHECK` no marca `unhealthy` un contenedor stdio. CI hace un smoke test stdio del contenedor.
 - **Anotaciones MCP en las 9 tools** (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`): `memory_search`/`list`/`recent`/`stats`/`export` se marcan como solo lectura, `memory_update`/`delete` como destructivas y `memory_save`/`import` como escrituras no destructivas. Los clientes que las soportan pueden auto-aprobar lecturas y pedir confirmación antes de modificar o borrar.
 - **`instructions` del servidor**: al conectarse, el agente recibe una guía breve de uso (buscar antes de responder sobre el usuario, queries con palabras clave literales porque la búsqueda es léxica, preferir `memory_update` a duplicar).
 - CLI: `mcp-memory --version` / `-V` y `mcp-memory --help`.
@@ -28,6 +38,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 - `CLAUDE.md`: regla para no publicar enlaces de sesión, atribución ni datos del entorno en commits y PRs.
 - Enlaces del final del CHANGELOG: apuntaban a tags (`v0.1.0`…`v0.4.0`) que no existen en el repo.
 - Dependencias: pisos mínimos subidos a `pydantic>=2.13.5`, `pydantic-settings>=2.15.0`, `aiosqlite>=0.22.1` y, en dev, `pytest-asyncio>=1.4.0` y `ruff>=0.16.9`. `uv.lock` regenerado (seguía declarando `mcp-memory` 0.4.0). Release: `docker/setup-buildx-action@v4` y `docker/metadata-action@v6` (runtime Node 24, sin cambios en los inputs usados).
+- Dependencias: `fastmcp>=4.1.0` (el piso anterior, `>=2.5.0`, no se probaba: el lock ya usaba 3.4.7), `pydantic>=2.14.1` y, en dev, `pytest>=9.1.1` y `ruff>=0.17.0`. `uv.lock` regenerado (fastmcp 4.1.0, mcp 2.3.0).
 - Plantilla de bug report actualizada al backend actual (pide `mcp-memory check`, health y `MCP_CORS_ORIGINS`) y enlace al reporte privado de vulnerabilidades.
 - Imagen de portada (`docs/assets/og-image.png`/`.svg`) rediseñada: icono de base de datos con búsqueda BM25, texto acorde al backend actual (SQLite + FTS5) y mismo estilo que tor-mcp-proxy.
 
@@ -65,5 +76,6 @@ El historial de git de este repo empieza en 0.5.0. Las versiones anteriores (0.1
 
 ---
 
-[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/83f2f88...HEAD
+[Unreleased]: https://github.com/GermaniU/mcp-memory/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/GermaniU/mcp-memory/compare/83f2f88...v0.6.0
 [0.5.0]: https://github.com/GermaniU/mcp-memory/commit/83f2f88

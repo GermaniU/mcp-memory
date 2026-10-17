@@ -2,6 +2,8 @@
 
 MCP Memory corre como un proceso Python nativo. No hay Docker, no hay servicios externos que levantar — el único estado es un archivo SQLite local.
 
+Tiene dos modos: **stdio** (tu cliente MCP lanza el proceso; no queda nada corriendo) y **HTTP** (lo arrancas tú y escucha en un puerto). Para stdio basta con `uv` instalado — ver [`CLIENTS.md`](CLIENTS.md#modo-stdio-recomendado); esta guía cubre la instalación local y el modo HTTP.
+
 ---
 
 ## Requisitos
@@ -44,8 +46,9 @@ Todas opcionales — hay defaults sensatos para uso local. Configúralas con `ex
 | Variable            | Default                       | Descripción |
 |---------------------|--------------------------------|-------------|
 | `DB_PATH`           | `~/.agent-memory/memory.db`   | Ruta del archivo SQLite. `~` se expande. Usa `:memory:` para una instancia efímera (se pierde todo al cerrar el proceso — solo para pruebas). |
-| `MCP_HOST`          | `127.0.0.1`                    | Host donde escucha el server MCP. |
-| `MCP_PORT`          | `8765`                         | Puerto del server MCP. |
+| `MCP_TRANSPORT`     | `http`                         | `http` o `stdio`. Los flags `--stdio`/`--http` del CLI tienen prioridad. |
+| `MCP_HOST`          | `127.0.0.1`                    | Host donde escucha el server MCP (solo HTTP). |
+| `MCP_PORT`          | `8765`                         | Puerto del server MCP (solo HTTP). |
 | `DEFAULT_NAMESPACE` | `default`                      | Namespace usado cuando el cliente no especifica uno. |
 | `MCP_CORS_ORIGINS`  | _vacío_ (CORS cerrado)         | Orígenes de navegador autorizados, separados por coma (ej. `http://localhost:3000`). Solo hace falta para clientes web. **Nunca uses `*`**: cualquier página que visites podría leer o borrar tus memorias. |
 
@@ -74,6 +77,7 @@ Salida esperada (instalación nueva):
 ==================================================
 Config:
   · DB_PATH:            /Users/tu-usuario/.agent-memory/memory.db
+  · MCP_TRANSPORT:      http
   · MCP_HOST/PORT:      127.0.0.1:8765
   · DEFAULT_NAMESPACE:  default
 --------------------------------------------------
@@ -98,6 +102,19 @@ docker run -d --name mcp-memory \
   -p 127.0.0.1:8765:8765 \
   -v mcp-memory-data:/data \
   ghcr.io/germaniu/mcp-memory:latest
+```
+
+En modo stdio el cliente lanza el contenedor en cada sesión (sin `-p`: no abre puerto). Usa el mismo volumen para que la memoria persista:
+
+```json
+{
+  "mcpServers": {
+    "mcp-memory": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "mcp-memory-data:/data", "ghcr.io/germaniu/mcp-memory:latest", "--stdio"]
+    }
+  }
+}
 ```
 
 ---

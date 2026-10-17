@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mcp-memory": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/GermaniU/mcp-memory#subdirectory=server",
+        "mcp-memory",
+        "--stdio"
+      ]
+    }
+  }
+}

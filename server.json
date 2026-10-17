@@ -1,0 +1,35 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.GermaniU/mcp-memory",
+  "title": "MCP Memory",
+  "description": "Local persistent memory for AI agents: SQLite + FTS5 (BM25) lexical search, zero external infra.",
+  "repository": {
+    "url": "https://github.com/GermaniU/mcp-memory",
+    "source": "github",
+    "subfolder": "server"
+  },
+  "version": "0.6.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/germaniu/mcp-memory:0.6.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--volume",
+          "value": "mcp-memory-data:/data",
+          "description": "Docker volume where the SQLite file persists between sessions."
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "--stdio"
+        }
+      ]
+    }
+  ]
+}

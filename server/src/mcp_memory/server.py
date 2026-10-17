@@ -192,6 +192,11 @@ async def _serve(settings: Settings) -> None:
     await store.ensure_schema()
     try:
         app = build_app(settings=settings, store=store)
+        if settings.mcp_transport == "stdio":
+            # stdout es el canal JSON-RPC: cualquier print lo corrompe. Los logs
+            # van a stderr (default de logging) y el banner se desactiva.
+            await app.run_async(transport="stdio", show_banner=False)
+            return
         http_app = build_http_app(app, settings)
         app.http_app = lambda *args, **kwargs: http_app
         await app.run_async(transport="http", host=settings.mcp_host, port=settings.mcp_port)
@@ -199,11 +204,15 @@ async def _serve(settings: Settings) -> None:
         await store.aclose()
 
 
-def main() -> None:
+def main(transport: str | None = None) -> None:
+    """Arranca el server. ``transport`` (CLI) tiene prioridad sobre MCP_TRANSPORT."""
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    anyio.run(_serve, get_settings())
+    settings = get_settings()
+    if transport is not None:
+        settings.mcp_transport = transport
+    anyio.run(_serve, settings)
 
 
 if __name__ == "__main__":
