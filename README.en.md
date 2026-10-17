@@ -7,10 +7,10 @@
 # MCP Memory — Local memory for AI agents via MCP
 
 > **Bring your AI agent's memory to any machine.**
-> Open source MCP server that gives persistent memory with lexical (BM25) search to Claude Code, OpenCode, Cursor, Continue, and any client compatible with the [Model Context Protocol](https://modelcontextprotocol.io). SQLite + FTS5, **zero external infra, 100% on your hardware**.
+> Open source MCP server that gives persistent memory with lexical (BM25) search to Claude Desktop, Claude Code, OpenCode, Cursor, Continue, and any client compatible with the [Model Context Protocol](https://modelcontextprotocol.io). SQLite + FTS5, **zero external infra, 100% on your hardware**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-green)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-stdio_%7C_Streamable_HTTP-green)](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](server/pyproject.toml)
 [![CI](https://github.com/GermaniU/mcp-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/GermaniU/mcp-memory/actions/workflows/ci.yml)
 [![SQLite](https://img.shields.io/badge/Storage-SQLite%20%2B%20FTS5-003B57?logo=sqlite&logoColor=white)](server/src/mcp_memory/shared/store.py)
@@ -30,7 +30,26 @@ AI agents forget everything between conversations. Existing solutions are cloud-
 
 ---
 
-## ⚡ Quickstart (3 commands)
+## ⚡ Quickstart
+
+There are two ways to run it. Pick one:
+
+| Mode | When | How it starts |
+|------|------|---------------|
+| **stdio** | Claude Desktop, Claude Code, Cursor… (simplest) | The client launches the process itself. No background server, no port. |
+| **HTTP** | Several clients against one server, Docker, web clients | You start it and it listens on `http://localhost:8765/mcp`. |
+
+### Option A — stdio (nothing left running)
+
+With [`uv`](https://docs.astral.sh/uv/) installed there's no need to clone: the client downloads and launches the server on every session. For Claude Code:
+
+```bash
+claude mcp add -s user mcp-memory -- uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio
+```
+
+For Claude Desktop, Cursor and the rest, the JSON config is in [`docs/CLIENTS.md`](docs/CLIENTS.md#modo-stdio-recomendado). Every process shares the same SQLite file (`DB_PATH`), so the memory is the same across all your clients.
+
+### Option B — HTTP (background server)
 
 ```bash
 git clone https://github.com/GermaniU/mcp-memory.git
@@ -44,6 +63,8 @@ mcp-memory
 No prerequisites: nothing to spin up, nothing to download. On startup the server creates the SQLite file (`DB_PATH`, default `~/.agent-memory/memory.db`) and its schema (a `memories` table + FTS5 index) if they don't exist yet.
 
 MCP endpoint: `http://localhost:8765/mcp`. Paste it into your client's config (see [`docs/CLIENTS.md`](docs/CLIENTS.md) — Claude Code, OpenCode, Cursor, Continue).
+
+> `mcp-memory --stdio` (or `MCP_TRANSPORT=stdio`) starts stdio mode from a local install.
 
 ### 🔍 Diagnostics & Health Check
 
@@ -103,9 +124,10 @@ If you need something from the NO list, open an [issue](https://github.com/Germa
 
 ## 🔌 Connect your client
 
-Ready-to-paste config snippets in [`docs/CLIENTS.md`](docs/CLIENTS.md) (in Spanish):
+Ready-to-paste config snippets in [`docs/CLIENTS.md`](docs/CLIENTS.md) (in Spanish; stdio and HTTP):
 
-- 🟦 **Claude Code** — `claude mcp add -s user -t http mcp-memory http://localhost:8765/mcp` (tools show up in new sessions).
+- 🟫 **Claude Desktop** — `claude_desktop_config.json` with `"command": "uvx"` (stdio).
+- 🟦 **Claude Code** — `claude mcp add -s user mcp-memory -- uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio`, or over HTTP `claude mcp add -s user -t http mcp-memory http://localhost:8765/mcp` (tools show up in new sessions).
 - 🟧 **Cursor** — Settings → MCP Servers → Add new MCP Server.
 - 🟩 **Continue** (VS Code / JetBrains) — `~/.continue/config.json`.
 - 🟪 **OpenCode** — `~/.config/opencode/config.json`.
@@ -188,8 +210,8 @@ Full details and step-by-step workflow in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest tests/unit -q          # 75 unit tests, ~1s
-pytest tests/integration -q   # 16 real E2E tests against SQLite/FTS5, no external services
+pytest tests/unit -q          # 81 unit tests, ~1s
+pytest tests/integration -q   # 17 real E2E tests against SQLite/FTS5 (stdio included), no external services
 ruff check src tests scripts
 ```
 

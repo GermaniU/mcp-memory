@@ -1,8 +1,69 @@
 # Conectar tu cliente MCP
 
-El servidor expone **streamable HTTP** en `http://localhost:8765/mcp` (puerto configurable).
+El servidor habla dos transportes:
+
+- **stdio** — el cliente lanza `mcp-memory --stdio` como subproceso y habla por stdin/stdout. No hay server de fondo ni puerto abierto. Es lo que esperan Claude Desktop y la mayoría de clientes.
+- **Streamable HTTP** — arrancas `mcp-memory` tú y los clientes se conectan a `http://localhost:8765/mcp` (puerto configurable). Útil para compartir un único proceso entre varios clientes o correrlo en Docker.
+
+En los dos modos la memoria vive en el mismo archivo (`DB_PATH`, default `~/.agent-memory/memory.db`): puedes mezclar clientes stdio y HTTP y todos ven las mismas memorias.
 
 ---
+
+## Modo stdio (recomendado)
+
+Necesitas [`uv`](https://docs.astral.sh/uv/getting-started/installation/). `uvx` descarga el server desde GitHub la primera vez, lo cachea y lo lanza en cada sesión — no hace falta clonar el repo:
+
+```
+uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio
+```
+
+Si ya lo instalaste localmente (`pip install -e .` dentro de `server/`), usa `mcp-memory --stdio` como comando.
+
+> Para pasar variables (`DB_PATH`, `DEFAULT_NAMESPACE`) usa el bloque `env` de la config del cliente: el proceso no hereda el `.env` de tu proyecto salvo que el cliente lo lance desde ese directorio.
+
+### Claude Desktop
+
+`Settings → Developer → Edit Config` abre `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
+
+```json
+{
+  "mcpServers": {
+    "mcp-memory": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/GermaniU/mcp-memory#subdirectory=server",
+        "mcp-memory",
+        "--stdio"
+      ]
+    }
+  }
+}
+```
+
+Reinicia Claude Desktop. Si no aparece, suele ser el `PATH`: las apps de escritorio no leen el de tu shell, así que pon la ruta absoluta de `uvx` en `command` (la que devuelve `which uvx`, típicamente `~/.local/bin/uvx`).
+
+Ver también: [`examples/claude-desktop.json`](../examples/claude-desktop.json).
+
+### Claude Code (stdio)
+
+```bash
+claude mcp add -s user mcp-memory -- uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio
+```
+
+### Cursor (stdio)
+
+`~/.cursor/mcp.json` (global) o `.cursor/mcp.json` (por proyecto): el mismo bloque `mcpServers` que en Claude Desktop.
+
+### Cualquier otro cliente
+
+Si tu cliente acepta un `command` + `args`, configura `uvx` con los argumentos de arriba. Es el formato estándar de servers MCP stdio.
+
+---
+
+## Modo HTTP
+
+Arranca el server (`mcp-memory`, o `docker run` — ver [`INSTALL.md`](INSTALL.md)) y apunta tu cliente a `http://localhost:8765/mcp`.
 
 ## Claude Code
 
@@ -92,7 +153,7 @@ Ver también: [`examples/opencode.json`](../examples/opencode.json).
 
 ## Otros clientes MCP
 
-Cualquier cliente que soporte **Streamable HTTP transport** funciona apuntando a `http://localhost:8765/mcp`. Si tu cliente solo soporta stdio, abre un issue — añadiremos un wrapper `docker exec`.
+Cualquier cliente que soporte **Streamable HTTP transport** funciona apuntando a `http://localhost:8765/mcp`. Si solo soporta stdio, usa el [modo stdio](#modo-stdio-recomendado).
 
 ---
 

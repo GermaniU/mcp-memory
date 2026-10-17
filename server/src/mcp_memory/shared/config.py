@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,6 +8,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     db_path: str = "~/.agent-memory/memory.db"
+
+    # "stdio": el cliente MCP lanza el proceso y habla por stdin/stdout (sin
+    # puerto ni server de fondo). "http": Streamable HTTP en MCP_HOST:MCP_PORT.
+    mcp_transport: Literal["http", "stdio"] = "http"
 
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8765

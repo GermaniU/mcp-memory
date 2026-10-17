@@ -90,10 +90,10 @@ cd mcp-memory/server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Tests unitarios (75, sin servicios externos, ~1s)
+# Tests unitarios (81, sin servicios externos, ~1s)
 pytest tests/unit -q
 
-# Tests de integración (14, SQLite + FTS5 real sobre :memory:, ~2s)
+# Tests de integración (17, SQLite + FTS5 real y un subproceso stdio, ~3s)
 pytest tests/integration -q
 
 # Lint + format

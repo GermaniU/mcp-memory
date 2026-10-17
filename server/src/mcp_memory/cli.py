@@ -2,6 +2,7 @@
 
 Supports:
   mcp-memory             -> Launches the FastMCP HTTP server.
+  mcp-memory --stdio     -> Serves MCP over stdin/stdout (the client spawns the process).
   mcp-memory check       -> Runs environment diagnostics (FTS5, db_path).
   mcp-memory --version   -> Prints the installed version.
 """
@@ -26,6 +27,7 @@ async def run_diagnostics() -> bool:
     print("==================================================")
     print("Config:")
     print(f"  · DB_PATH:            {settings.db_path}")
+    print(f"  · MCP_TRANSPORT:      {settings.mcp_transport}")
     print(f"  · MCP_HOST/PORT:      {settings.mcp_host}:{settings.mcp_port}")
     print(f"  · DEFAULT_NAMESPACE:  {settings.default_namespace}")
     print("--------------------------------------------------")
@@ -95,10 +97,25 @@ def _build_parser() -> argparse.ArgumentParser:
         description=(
             "Local agent memory over MCP (SQLite + FTS5). Without arguments, starts the "
             "Streamable HTTP server. Configuration comes from env vars / .env "
-            "(DB_PATH, MCP_HOST, MCP_PORT, DEFAULT_NAMESPACE, MCP_CORS_ORIGINS)."
+            "(DB_PATH, MCP_TRANSPORT, MCP_HOST, MCP_PORT, DEFAULT_NAMESPACE, MCP_CORS_ORIGINS)."
         ),
     )
     parser.add_argument("--version", "-V", action="version", version=f"%(prog)s {__version__}")
+    transport = parser.add_mutually_exclusive_group()
+    transport.add_argument(
+        "--stdio",
+        dest="transport",
+        action="store_const",
+        const="stdio",
+        help="Serve MCP over stdin/stdout, for clients that launch the server themselves.",
+    )
+    transport.add_argument(
+        "--http",
+        dest="transport",
+        action="store_const",
+        const="http",
+        help="Serve Streamable HTTP on MCP_HOST:MCP_PORT (default, unless MCP_TRANSPORT=stdio).",
+    )
     # `--check`/`-c` se mantienen por compatibilidad con versiones anteriores.
     parser.add_argument("--check", "-c", action="store_true", help=argparse.SUPPRESS)
     subcommands = parser.add_subparsers(dest="command")
@@ -114,7 +131,7 @@ def main(argv: list[str] | None = None) -> None:
         success = asyncio.run(run_diagnostics())
         sys.exit(0 if success else 1)
     else:
-        server_main()
+        server_main(transport=args.transport)
 
 
 if __name__ == "__main__":

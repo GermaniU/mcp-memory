@@ -9,6 +9,8 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 ## [Unreleased]
 
 ### Added
+- **Transporte stdio**: `mcp-memory --stdio` (o `MCP_TRANSPORT=stdio`) sirve MCP por stdin/stdout, para que el cliente lance el proceso él solo — sin server de fondo ni puerto abierto. Es lo que piden Claude Desktop y la mayoría de clientes. Con `uv` no hace falta clonar: `uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio`. Los logs van a stderr para no corromper el canal JSON-RPC; un test E2E lanza el subproceso real y lo verifica. HTTP sigue siendo el default (`--http` lo fuerza).
+- Docs: configuración stdio para Claude Desktop, Claude Code y Cursor en `docs/CLIENTS.md`, y `examples/claude-desktop.json`.
 - **Anotaciones MCP en las 9 tools** (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`): `memory_search`/`list`/`recent`/`stats`/`export` se marcan como solo lectura, `memory_update`/`delete` como destructivas y `memory_save`/`import` como escrituras no destructivas. Los clientes que las soportan pueden auto-aprobar lecturas y pedir confirmación antes de modificar o borrar.
 - **`instructions` del servidor**: al conectarse, el agente recibe una guía breve de uso (buscar antes de responder sobre el usuario, queries con palabras clave literales porque la búsqueda es léxica, preferir `memory_update` a duplicar).
 - CLI: `mcp-memory --version` / `-V` y `mcp-memory --help`.
