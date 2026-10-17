@@ -18,6 +18,12 @@
 
 **Tags:** `mcp-server` · `ai-agents` · `sqlite` · `fts5` · `bm25` · `claude-code` · `cursor` · `opencode` · `lexical-search` · `agent-memory` · `local-first` · `self-hosted`
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="The agent saves a memory in one session and recalls it in another" width="780">
+</p>
+
+<p align="center"><sub>The agent saves something in one session and recalls it in another — same SQLite file, new process. No cloud, no vectors, no extra services.</sub></p>
+
 ---
 
 ## 💡 Why it exists
@@ -116,9 +122,32 @@ MCP Memory is deliberately small. It does **one thing well: lexical memory for p
 - ❌ **Not multi-tenant.** One person, one machine, one memory (namespaces separate contexts).
 - ❌ **No built-in UI.** Manage it from your agent or via curl/MCP.
 - ❌ **No cross-machine sync.** Manual backup (copy the `.db` file) if you want to move data.
-- ❌ **No auth.** Listens on `localhost` only, with CORS closed. If you expose it to the internet, put an auth proxy in front. See [`SECURITY.md`](SECURITY.md).
+- ❌ **No auth.** In HTTP mode it listens on `localhost` only, with CORS closed (in stdio mode it opens no port). If you expose it to the internet, put an auth proxy in front. See [`SECURITY.md`](SECURITY.md).
 
 If you need something from the NO list, open an [issue](https://github.com/GermaniU/mcp-memory/issues) with a real (not speculative) use case — we add things on demand, not on speculation.
+
+---
+
+## 🧭 How does it compare to the official `server-memory`?
+
+The official MCP ships [`server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) (`@modelcontextprotocol/server-memory`). They don't compete for the same job: that one is a **knowledge graph**; this one is **lexical memory for text**. Pick by what you need to remember.
+
+| | **MCP Memory** (this) | **`server-memory`** (official) |
+|---|---|---|
+| Data model | Flat text entries (`content` + `tags` + `metadata`) | Graph: entities + relations + observations |
+| Storage | One **SQLite** file with an **FTS5** index | One **JSONL** file holding the whole graph |
+| Search | **Ranked BM25** (FTS5), filtered by `namespace` | `search_nodes`: *substring* match over name/type/observations, **no ranking** |
+| Namespaces | ✅ one pool per project or agent | ❌ |
+| Free-form tags / metadata | ✅ per entry | ❌ |
+| Export / import | ✅ `memory_export` / `memory_import` (JSONL) | ❌ read and write the file by hand |
+| Transport | **stdio + Streamable HTTP** | stdio |
+| Cost of reading | Ranking in SQLite: you fetch only the hits | `read_graph` returns the entire graph |
+
+**In one sentence:**
+- If your problem is **facts with relations** ("Ana *works_at* Acme", "*parent_of*…"), use the official graph.
+- If your problem is **remembering notes and decisions and finding them by keyword**, split by project, with export/import, use MCP Memory.
+
+It's not "better than": it's **a different tool for a different job** — and the one that doesn't make you load the whole graph on every query.
 
 ---
 

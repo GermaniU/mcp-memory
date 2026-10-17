@@ -18,6 +18,12 @@
 
 **Tags:** `mcp-server` · `ai-agents` · `sqlite` · `fts5` · `bm25` · `claude-code` · `cursor` · `opencode` · `lexical-search` · `agent-memory` · `local-first` · `self-hosted`
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="El agente guarda un recuerdo en una sesión y lo recupera en otra" width="780">
+</p>
+
+<p align="center"><sub>El agente guarda algo en una sesión y lo recuerda en otra — mismo archivo SQLite, proceso nuevo. Sin nube, sin vectores, sin servicios extra.</sub></p>
+
 ---
 
 ## 💡 Por qué existe
@@ -119,6 +125,29 @@ MCP Memory es deliberadamente pequeño. Hace **una cosa bien: memoria léxica de
 - ❌ **No tiene auth.** En modo HTTP solo escucha en `localhost` y con CORS cerrado (en stdio no abre ningún puerto). Si lo expones a internet, pon un proxy con auth. Ver [`SECURITY.md`](SECURITY.md).
 
 Si necesitas algo de la lista NO, abre un [issue](https://github.com/GermaniU/mcp-memory/issues) con caso de uso real (no especulativo) — vamos por demanda, no por especulación.
+
+---
+
+## 🧭 ¿Y el `server-memory` oficial?
+
+El MCP oficial incluye [`server-memory`](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) (`@modelcontextprotocol/server-memory`). No compiten por el mismo trabajo: ese es un **grafo de conocimiento**; este es **memoria léxica de texto**. Elige según lo que necesites recordar.
+
+| | **MCP Memory** (este) | **`server-memory`** (oficial) |
+|---|---|---|
+| Modelo de datos | Entradas de texto planas (`content` + `tags` + `metadata`) | Grafo: entidades + relaciones + observaciones |
+| Almacenamiento | Un archivo **SQLite** con índice **FTS5** | Un archivo **JSONL** con el grafo completo |
+| Búsqueda | **BM25 con ranking** (FTS5), filtrada por `namespace` | `search_nodes`: match por *substring* en nombre/tipo/observaciones, **sin ranking** |
+| Namespaces | ✅ un pool por proyecto o agente | ❌ |
+| Tags / metadata libres | ✅ por entrada | ❌ |
+| Export / import | ✅ `memory_export` / `memory_import` (JSONL) | ❌ hay que leer y escribir el archivo |
+| Transporte | **stdio + Streamable HTTP** | stdio |
+| Coste de leer | Ranking en SQLite: traes solo los hits | `read_graph` devuelve el grafo entero |
+
+**En una frase:**
+- Si tu problema son **hechos con relaciones** («Ana *trabaja_en* Acme», «*padre_de*…»), usa el grafo oficial.
+- Si tu problema es **recordar notas y decisiones y encontrarlas por palabra clave**, separadas por proyecto y con export/import, usa MCP Memory.
+
+No es «mejor que»: es **otra herramienta para otro trabajo** — y la que no te obliga a cargar el grafo completo en cada consulta.
 
 ---
 

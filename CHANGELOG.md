@@ -8,6 +8,10 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Added
+- **Demo grabable** (`server/scripts/demo_recall.py` y `docs/assets/demo.gif`): el agente guarda un recuerdo en una sesión y lo recupera en otra contra el mismo archivo SQLite — el flujo que el README muestra al inicio. El script habla MCP real (dos clientes independientes, sin estado compartido salvo el `.db`), no texto inventado.
+- README (ES/EN): GIF del demo bajo el hero y sección **«¿Y el `server-memory` oficial?»** con la comparación honesta frente al grafo oficial (modelo de datos, búsqueda, namespaces, export/import, transporte).
+
 ---
 
 ## [0.6.0] — 2026-10-17
