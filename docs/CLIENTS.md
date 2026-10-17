@@ -17,6 +17,8 @@ Necesitas [`uv`](https://docs.astral.sh/uv/getting-started/installation/). `uvx`
 uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio
 ```
 
+Esa URL sigue la rama `main`. Para fijar una versión y que un cambio en `main` no te sorprenda, añade el tag: `git+https://github.com/GermaniU/mcp-memory@v0.6.0#subdirectory=server`.
+
 Si ya lo instalaste localmente (`pip install -e .` dentro de `server/`), usa `mcp-memory --stdio` como comando.
 
 > Para pasar variables (`DB_PATH`, `DEFAULT_NAMESPACE`) usa el bloque `env` de la config del cliente: el proceso no hereda el `.env` de tu proyecto salvo que el cliente lo lance desde ese directorio.

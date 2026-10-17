@@ -1,11 +1,12 @@
 """Demo grabable: el agente guarda algo en una sesión y lo recupera en otra.
 
-Dos clientes MCP independientes (dos "sesiones") contra el mismo server y la
-misma DB en disco. La segunda sesión no comparte memoria en RAM con la primera:
-lo único que las une es el archivo SQLite.
+Cada sesión lanza su propio proceso `mcp-memory --stdio` (como hace un cliente
+real) y el proceso termina al cerrarla. La segunda sesión no comparte RAM con la
+primera: lo único que las une es el archivo SQLite.
 
-Pensado para grabarse con asciinema -> GIF (ver docs/assets/demo.gif).
-Requiere el server corriendo en http://localhost:8765/mcp con una DB limpia.
+Pensado para grabarse con asciinema -> GIF (ver docs/assets/demo.gif). No hace
+falta ningún server corriendo: usa una DB temporal limpia salvo que se pase
+MCP_DEMO_DB_PATH.
 
 Uso:
     .venv/bin/python scripts/demo_recall.py
@@ -16,12 +17,14 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 import anyio
 from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
-URL = os.environ.get("MCP_DEMO_URL", "http://localhost:8765/mcp")
 NS = "prod-incident"
 
 
@@ -41,10 +44,26 @@ def payload(result):
     return json.loads(result.content[0].text)
 
 
-async def session_1_save() -> str:
+def new_process(db_path: str) -> Client:
+    """Un proceso `mcp-memory --stdio` nuevo por sesión, contra el mismo DB_PATH.
+
+    Los logs del server (stderr) van a un archivo junto a la DB para no ensuciar
+    la grabación.
+    """
+    return Client(
+        StdioTransport(
+            command=sys.executable,
+            args=["-m", "mcp_memory", "--stdio"],
+            env={**os.environ, "DB_PATH": db_path},
+            log_file=Path(db_path).with_suffix(".log"),
+        )
+    )
+
+
+async def session_1_save(db_path: str) -> str:
     out("\033[1;36m▸ sesión 1\033[0m  ·  el agente aprende algo")
     beat()
-    async with Client(URL) as c:
+    async with new_process(db_path) as c:
         out('  \033[2magent →\033[0m memory_save  { namespace: "prod-incident" }')
         beat()
         r1 = payload(
@@ -82,11 +101,11 @@ async def session_1_save() -> str:
     return NS
 
 
-async def session_2_recall() -> None:
+async def session_2_recall(db_path: str) -> None:
     out()
     out("\033[1;36m▸ sesión 2\033[0m  ·  proceso nuevo, otra conversación")
     beat()
-    async with Client(URL) as c:
+    async with new_process(db_path) as c:
         out('  \033[2magent →\033[0m memory_search  { query: "gateway pagos reintentos backoff" }')
         beat()
         hits = payload(
@@ -114,9 +133,11 @@ async def main() -> int:
     out("  \033[1mMCP Memory\033[0m — memoria persistente para agentes (SQLite + FTS5/BM25)")
     out("  \033[2m────────────────────────────────────────────────────────────\033[0m")
     beat()
-    await session_1_save()
-    beat(1.0)
-    await session_2_recall()
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = os.environ.get("MCP_DEMO_DB_PATH") or str(Path(tmp) / "memory.db")
+        await session_1_save(db_path)
+        beat(1.0)
+        await session_2_recall(db_path)
     out()
     out("  \033[1;32m✓ recordado en una sesión distinta — mismo archivo SQLite\033[0m")
     out()

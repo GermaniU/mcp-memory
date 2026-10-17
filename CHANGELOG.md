@@ -8,15 +8,13 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
-### Added
-- **Demo grabable** (`server/scripts/demo_recall.py` y `docs/assets/demo.gif`): el agente guarda un recuerdo en una sesión y lo recupera en otra contra el mismo archivo SQLite — el flujo que el README muestra al inicio. El script habla MCP real (dos clientes independientes, sin estado compartido salvo el `.db`), no texto inventado.
-- README (ES/EN): GIF del demo bajo el hero y sección **«¿Y el `server-memory` oficial?»** con la comparación honesta frente al grafo oficial (modelo de datos, búsqueda, namespaces, export/import, transporte).
-
 ---
 
 ## [0.6.0] — 2026-10-17
 
 ### Added
+- **Demo grabable** (`server/scripts/demo_recall.py` y `docs/assets/demo.gif`): el agente guarda un recuerdo en una sesión y lo recupera en otra contra el mismo archivo SQLite — el flujo que el README muestra al inicio. El script habla MCP real (dos clientes independientes, sin estado compartido salvo el `.db`), no texto inventado.
+- README (ES/EN): GIF del demo bajo el hero y sección **«¿Y el `server-memory` oficial?»** con la comparación honesta frente al grafo oficial (modelo de datos, búsqueda, namespaces, export/import, transporte).
 - **Transporte stdio**: `mcp-memory --stdio` (o `MCP_TRANSPORT=stdio`) sirve MCP por stdin/stdout, para que el cliente lance el proceso él solo — sin server de fondo ni puerto abierto. Es lo que piden Claude Desktop y la mayoría de clientes. Con `uv` no hace falta clonar: `uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio`. Los logs van a stderr para no corromper el canal JSON-RPC; un test E2E lanza el subproceso real y lo verifica. HTTP sigue siendo el default (`--http` lo fuerza).
 - Docs: configuración stdio para Claude Desktop, Claude Code y Cursor en `docs/CLIENTS.md`, y `examples/claude-desktop.json`.
 - **MCP Registry**: `server.json` (namespace `io.github.GermaniU/mcp-memory`, imagen OCI de GHCR por stdio) y job `mcp-registry` en `release.yml`, que lo publica con login OIDC de GitHub Actions al empujar un tag `v*`. La imagen lleva el label `io.modelcontextprotocol.server.name` que el registry usa para verificar la propiedad; CI comprueba que coincida con `server.json`.
