@@ -8,11 +8,11 @@
     "source": "github",
     "subfolder": "server"
   },
-  "version": "0.5.0",
+  "version": "0.6.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/germaniu/mcp-memory:0.5.0",
+      "identifier": "ghcr.io/germaniu/mcp-memory:0.6.0",
       "transport": {
         "type": "stdio"
       },
