@@ -104,6 +104,19 @@ docker run -d --name mcp-memory \
   ghcr.io/germaniu/mcp-memory:latest
 ```
 
+En modo stdio el cliente lanza el contenedor en cada sesión (sin `-p`: no abre puerto). Usa el mismo volumen para que la memoria persista:
+
+```json
+{
+  "mcpServers": {
+    "mcp-memory": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "mcp-memory-data:/data", "ghcr.io/germaniu/mcp-memory:latest", "--stdio"]
+    }
+  }
+}
+```
+
 ---
 
 ## Healthcheck

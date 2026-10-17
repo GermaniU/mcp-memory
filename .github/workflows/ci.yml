@@ -111,3 +111,18 @@ jobs:
             sleep 1
           done
           test "$status" = "healthy"
+
+      # Así lo lanzan los clientes stdio (y el MCP Registry): `docker run -i --rm <imagen> --stdio`.
+      # Al cerrarse stdin el server termina, así que la respuesta llega sin colgar el job.
+      - name: Smoke test stdio del contenedor
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            | timeout 60 docker run -i --rm mcp-memory:ci --stdio > stdio.out
+          cat stdio.out
+          grep -q '"protocolVersion"' stdio.out
+
+      # El MCP Registry rechaza la imagen si el label no coincide con server.json.
+      - name: Label del MCP Registry coincide con server.json
+        run: |
+          label="$(docker inspect -f '{{ index .Config.Labels "io.modelcontextprotocol.server.name" }}' mcp-memory:ci)"
+          test "$label" = "$(jq -r .name server.json)"
