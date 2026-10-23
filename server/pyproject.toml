@@ -46,6 +46,10 @@ Changelog = "https://github.com/GermaniU/mcp-memory/blob/main/CHANGELOG.md"
 [project.scripts]
 mcp-memory = "mcp_memory.cli:main"
 
+[tool.uv]
+# uv < 0.13.4 bundles the compromised emSign ECC Root CA - G3 (GHSA-hq85-5cpj-mr62).
+required-version = ">=0.13.4"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

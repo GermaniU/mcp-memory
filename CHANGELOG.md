@@ -8,6 +8,9 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y e
 
 ## [Unreleased]
 
+### Security
+- **Incidente eMudhra** (`emSign ECC Root CA - G3`, GHSA-6q48-6c7w-9gw2 / GHSA-hq85-5cpj-mr62): la imagen Docker y la CI reemplazan el pip de base por `pip 26.2.2` desde un wheel fijado por hash antes de descargar dependencias; el smoke test de CI falla si la imagen trae `pip < 26.2.2` o un certifi embebido (o transitivo) anterior a `2026.10.19`. `pip-audit` corre en Python 3.13.17 (su `ensurepip` ya trae pip 26.2.2) con `certifi>=2026.10.19`. `server/pyproject.toml` exige `uv>=0.13.4` (`[tool.uv] required-version`). Las imágenes de release y de CI se construyen con `--pull` y sin caché. El server no importa certifi (`httpx2` usa `truststore`), así que no se añade como dependencia directa. Docs: versiones mínimas en `SECURITY.md`, README, `docs/CLIENTS.md`, `docs/INSTALL.md` y `CONTRIBUTING.md`.
+
 ---
 
 ## [0.6.0] — 2026-10-17

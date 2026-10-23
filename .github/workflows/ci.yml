@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # pip < 26.2.2 trusts the compromised emSign ECC Root CA - G3 through its
+  # vendored certifi (eMudhra incident). The runner's pip is replaced with a
+  # hash-pinned wheel before anything else is downloaded.
+  PIP_BOOTSTRAP: "pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+
 jobs:
   lint:
     name: Lint (ruff)
@@ -25,6 +31,11 @@ jobs:
           cache: pip
           # Sin requirements*.txt en el repo, cache:pip necesita el path explícito.
           cache-dependency-path: server/pyproject.toml
+
+      - name: Bootstrap pip >= 26.2.2 (hash-pinned)
+        run: |
+          python -m pip install --no-deps "$PIP_BOOTSTRAP"
+          python -m pip --version
 
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
@@ -53,6 +64,11 @@ jobs:
           cache: pip
           cache-dependency-path: server/pyproject.toml
 
+      - name: Bootstrap pip >= 26.2.2 (hash-pinned)
+        run: |
+          python -m pip install --no-deps "$PIP_BOOTSTRAP"
+          python -m pip --version
+
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
 
@@ -74,14 +90,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # pip-audit resolves the project in a throwaway venv seeded by ensurepip and
+      # upgrades pip there with that seeded pip. 3.13.17 is the first 3.13 build
+      # whose bundled pip is 26.2.2, so that step does not run on the old trust store.
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.13.17"
           cache: pip
           cache-dependency-path: server/pyproject.toml
 
+      - name: ensurepip trae pip >= 26.2.2
+        run: |
+          python - <<'EOF'
+          import ensurepip
+          v = tuple(int(x) for x in ensurepip.version().split(".")[:3])
+          assert v >= (26, 2, 2), f"ensurepip bundles pip {ensurepip.version()}"
+          print("ensurepip pip", ensurepip.version())
+          EOF
+
+      - name: Bootstrap pip >= 26.2.2 (hash-pinned)
+        run: |
+          python -m pip install --no-deps "$PIP_BOOTSTRAP"
+          python -m pip --version
+
+      # pip-audit queries the vulnerability services through requests/certifi.
       - name: Instalar pip-audit
-        run: pip install pip-audit
+        run: pip install pip-audit "certifi>=2026.10.19"
 
       # Modo proyecto: audita solo las dependencias declaradas en pyproject.toml
       # (resueltas en un entorno aislado), no las herramientas preinstaladas del
@@ -96,7 +130,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: docker build
-        run: docker build -t mcp-memory:ci server
+        run: docker build --pull --no-cache -t mcp-memory:ci server
 
       - name: Smoke test del contenedor (healthcheck + usuario sin privilegios)
         run: |
@@ -104,6 +138,22 @@ jobs:
           for i in $(seq 1 20); do curl -fs localhost:8765/health && break; sleep 1; done
           curl -fs localhost:8765/health
           test "$(docker exec mcp-memory id -u)" != "0"
+          # Neither pip, its vendored certifi nor a transitive certifi (fastmcp pulls
+          # one in) may predate the eMudhra fix.
+          docker exec -i mcp-memory python - <<'EOF'
+          import importlib.util
+          import pip
+          import pip._vendor.certifi as vendored
+          def v(s):
+              return tuple(int(x) for x in s.split(".")[:3])
+          assert v(pip.__version__) >= (26, 2, 2), pip.__version__
+          assert v(vendored.__version__) >= (2026, 10, 19), vendored.__version__
+          print("pip", pip.__version__, "vendored certifi", vendored.__version__)
+          if importlib.util.find_spec("certifi"):
+              import certifi
+              assert v(certifi.__version__) >= (2026, 10, 19), certifi.__version__
+              print("certifi", certifi.__version__)
+          EOF
           # El HEALTHCHECK del Dockerfile debe reportar "healthy" (tarda un intervalo).
           for i in $(seq 1 30); do
             status="$(docker inspect -f '{{.State.Health.Status}}' mcp-memory)"

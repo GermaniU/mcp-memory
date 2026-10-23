@@ -11,7 +11,7 @@ En los dos modos la memoria vive en el mismo archivo (`DB_PATH`, default `~/.age
 
 ## Modo stdio (recomendado)
 
-Necesitas [`uv`](https://docs.astral.sh/uv/getting-started/installation/). `uvx` descarga el server desde GitHub la primera vez, lo cachea y lo lanza en cada sesión — no hace falta clonar el repo:
+Necesitas [`uv`](https://docs.astral.sh/uv/getting-started/installation/) **0.13.4 o superior** (ver [`SECURITY.md`](../SECURITY.md#cadena-de-suministro-incidente-emudhra)). `uvx` descarga el server desde GitHub la primera vez, lo cachea y lo lanza en cada sesión — no hace falta clonar el repo:
 
 ```
 uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio

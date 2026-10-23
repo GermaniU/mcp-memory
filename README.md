@@ -47,7 +47,7 @@ Hay dos formas de correrlo. Elige una:
 
 ### Opción A — stdio (sin dejar nada corriendo)
 
-Con [`uv`](https://docs.astral.sh/uv/) instalado no hace falta clonar: el cliente descarga y lanza el server en cada sesión. Para Claude Code:
+Con [`uv`](https://docs.astral.sh/uv/) **0.13.4 o superior** instalado no hace falta clonar (las versiones anteriores confían en una CA comprometida, ver [`SECURITY.md`](SECURITY.md#cadena-de-suministro-incidente-emudhra)): el cliente descarga y lanza el server en cada sesión. Para Claude Code:
 
 ```bash
 claude mcp add -s user mcp-memory -- uvx --from "git+https://github.com/GermaniU/mcp-memory#subdirectory=server" mcp-memory --stdio
