@@ -40,6 +40,26 @@ Este documento explica qué protege `mcp-memory`, qué **no** protege y cómo re
 
 ---
 
+## Cadena de suministro: incidente eMudhra
+
+En octubre de 2026 se publicaron las claves privadas de intermediarios de eMudhra emitidos por `emSign ECC Root CA - G3`: con ellas se pueden fabricar certificados TLS válidos para cualquier dominio, incluidos python.org y pypi.org. Los bundles de CA embebidos se corrigieron en estas versiones mínimas ([GHSA-6q48-6c7w-9gw2](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2), [GHSA-hq85-5cpj-mr62](https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62)):
+
+| Herramienta | Mínimo | Qué hace este repo |
+|---|---|---|
+| `pip` | 26.2.2 | La imagen Docker y la CI reemplazan el pip de base por un wheel fijado por hash antes de instalar nada; la CI verifica la versión dentro de la imagen. |
+| `certifi` | 2026.10.19 | El server no lo importa: `httpx2` valida TLS con `truststore` (almacén del sistema). `fastmcp` actual (4.1.3) lo arrastra con ese piso y la CI comprueba la versión dentro de la imagen; `pip-audit` lo usa en CI y lo pide explícitamente. |
+| `uv` | 0.13.4 | `server/pyproject.toml` declara `required-version = ">=0.13.4"`: un uv anterior se niega a operar sobre el proyecto. |
+
+Si ya tienes un venv creado, actualiza pip con el wheel fijado por hash (un `pip install --upgrade pip` normal descargaría la actualización con el almacén vulnerable):
+
+```bash
+python -m pip install --no-deps "pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
+```
+
+Las imágenes publicadas se construyen sin caché de capas y sobre la imagen base actual, para heredar el almacén de CA corregido del sistema.
+
+---
+
 ## Reportar una vulnerabilidad
 
 **No abras un issue público.** Usa el reporte privado de GitHub: ve a la pestaña **Security** del repositorio, elige **Report a vulnerability** e incluye:

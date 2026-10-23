@@ -44,6 +44,10 @@ jobs:
           context: server
           platforms: linux/amd64,linux/arm64
           push: true
+          # Always start from the current base image and its system CA store
+          # (eMudhra incident): never reuse cached layers for a published image.
+          pull: true
+          no-cache: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
